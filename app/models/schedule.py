@@ -10,7 +10,6 @@ class Schedule(db.Model):
     horaInicio = db.Column(db.String(10), nullable=False)
     horaFin = db.Column(db.String(10), nullable=False)
     cuposMaximos = db.Column(db.Integer, nullable=False)
-    asistencias = db.relationship('Asistencia', backref='horario', lazy=True)
 
     def __repr__(self):
-        return f"<Horario {self.nombre}>"
+        return f"<Schedule {self.nombre}>"

@@ -5,10 +5,9 @@ from app import db
 class Responsible(db.Model):
     __tablename__ = "responsible"
 
-
     id = db.Column(db.Integer, primary_key=True)
     participante_id = db.Column(db.Integer, db.ForeignKey('participant.id'))
-    participante = db.relationship('Participante', backref=db.backref('responsables', lazy=True))
+    participante = db.relationship('Participant', backref=db.backref('responsables', lazy=True))
     nombre = db.Column(db.String(100), nullable=False)
     dni = db.Column(db.String(20), unique=True, nullable=False)
     telefono = db.Column(db.String(20), nullable=False)

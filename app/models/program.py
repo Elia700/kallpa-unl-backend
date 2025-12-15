@@ -7,7 +7,8 @@ class Program(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
-    horarios = db.relationship('Horario', backref='programa', lazy=True, cascade= "all, delete-orphan")
+    horarios = db.relationship('Schedule', backref='programa', lazy=True, cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<Programa {self.nombre}>"
     

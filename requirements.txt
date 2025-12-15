@@ -1,3 +1,7 @@
 Flask
 Flask-SQLAlchemy
 python-dotenv
+Flask-Marshmallow
+marshmallow-sqlalchemy
+PyJWT
+requests

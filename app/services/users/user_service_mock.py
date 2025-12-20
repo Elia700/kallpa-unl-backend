@@ -92,3 +92,42 @@ class UserServiceMock:
             'msg': 'Niño y representante registrados correctamente (MOCK)',
             'data': {'id_participante': new_id}
         }, 201
+
+    def change_status(self, user_id, nuevo_estado):
+        """Cambia el estado de un participante (versión MOCK)"""
+        users = self._load()
+        
+        # Buscar el usuario por ID
+        user_found = None
+        for user in users:
+            if user.get('id') == user_id:
+                user_found = user
+                break
+        
+        if not user_found:
+            return {"status": "error", "msg": "Participante no encontrado"}, 404
+        
+        # Actualizar el estado
+        user_found['estado'] = nuevo_estado
+        self._save(users)
+        
+        return {
+            'status': 'ok',
+            'msg': f'Estado actualizado a {nuevo_estado} (MOCK)',
+            'data': user_found
+        }, 200
+
+    def search_by_dni(self, dni):
+        """Busca un participante por DNI (versión MOCK)"""
+        users = self._load()
+        
+        # Buscar el usuario por DNI
+        for user in users:
+            if user.get('dni') == dni:
+                return {
+                    'status': 'ok',
+                    'msg': 'Participante encontrado (MOCK)',
+                    'data': user
+                }, 200
+        
+        return {"status": "error", "msg": "Participante no encontrado"}, 404

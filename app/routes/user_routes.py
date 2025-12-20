@@ -31,7 +31,14 @@ def cambiar_estado(user_id):
     return jsonify(response), status
 
 
-@user_bp.route("/users/search/<string:dni>", methods=["GET"])
-def buscar_usuario(dni):
+# ✅ SEGURO (El DNI va encriptado/oculto en el cuerpo del mensaje)
+@user_bp.route("/users/search", methods=["POST"])
+def buscar_usuario():
+    data = request.json
+    dni = data.get('dni')  # Extraemos el DNI del JSON
+    
+    if not dni:
+        return jsonify({"status": "error", "msg": "Falta el DNI"}), 400
+
     response, status = controller.search_user(dni)
     return jsonify(response), status

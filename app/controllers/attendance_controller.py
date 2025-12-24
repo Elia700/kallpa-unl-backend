@@ -30,3 +30,21 @@ class AttendanceController:
     def obtener_resumen_por_participante(self, participant_external_id):
         """Obtener resumen de asistencias de un participante"""
         return attendance_service.obtener_resumen_por_participante(participant_external_id)
+
+    # ========== MÉTODOS PÚBLICOS PARA EL FRONTEND ==========
+
+    def obtener_participantes(self):
+        """Obtener todos los participantes"""
+        return attendance_service.obtener_participantes()
+
+    def obtener_schedules(self):
+        """Obtener todos los horarios"""
+        return attendance_service.obtener_schedules()
+
+    def obtener_sesiones_hoy(self):
+        """Obtener las sesiones programadas para hoy"""
+        return attendance_service.obtener_sesiones_hoy()
+
+    def obtener_historial(self, date_from=None, date_to=None):
+        """Obtener historial de asistencias"""
+        return attendance_service.obtener_historial(date_from, date_to)

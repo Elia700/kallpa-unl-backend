@@ -242,3 +242,108 @@ class AttendanceServiceDB:
             )
         except Exception as e:
             return error_response(f"Error interno: {str(e)}")
+
+    # ========== MÉTODOS PÚBLICOS PARA EL FRONTEND ==========
+
+    def obtener_participantes(self):
+        """Obtener todos los participantes"""
+        try:
+            participants = Participant.query.all()
+            result = []
+            for p in participants:
+                result.append({
+                    "external_id": p.external_id,
+                    "first_name": p.first_name,
+                    "last_name": p.last_name,
+                    "dni": p.dni,
+                    "email": getattr(p, 'email', None),
+                    "phone": getattr(p, 'phone', None),
+                    "status": getattr(p, 'status', 'active')
+                })
+            return success_response(
+                msg="Participantes obtenidos correctamente",
+                data=result
+            )
+        except Exception as e:
+            return error_response(f"Error interno: {str(e)}")
+
+    def obtener_schedules(self):
+        """Obtener todos los horarios"""
+        try:
+            schedules = Schedule.query.all()
+            result = []
+            for s in schedules:
+                result.append({
+                    "external_id": s.external_id,
+                    "day_of_week": s.day_of_week,
+                    "start_time": s.start_time,
+                    "end_time": s.end_time,
+                    "program_id": s.program_id
+                })
+            return success_response(
+                msg="Horarios obtenidos correctamente",
+                data=result
+            )
+        except Exception as e:
+            return error_response(f"Error interno: {str(e)}")
+
+    def obtener_sesiones_hoy(self):
+        """Obtener las sesiones programadas para hoy"""
+        try:
+            from datetime import datetime
+            dias_semana = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+            hoy = dias_semana[datetime.now().weekday()]
+
+            schedules = Schedule.query.filter_by(day_of_week=hoy).all()
+            result = []
+            for s in schedules:
+                result.append({
+                    "external_id": s.external_id,
+                    "day_of_week": s.day_of_week,
+                    "start_time": s.start_time,
+                    "end_time": s.end_time,
+                    "program_id": s.program_id
+                })
+            return success_response(
+                msg=f"Sesiones de hoy ({hoy}) obtenidas correctamente",
+                data=result
+            )
+        except Exception as e:
+            return error_response(f"Error interno: {str(e)}")
+
+    def obtener_historial(self, date_from=None, date_to=None):
+        """Obtener historial de asistencias con rango de fechas opcional"""
+        try:
+            query = Attendance.query
+
+            if date_from:
+                query = query.filter(Attendance.date >= date_from)
+            if date_to:
+                query = query.filter(Attendance.date <= date_to)
+
+            attendances = query.order_by(Attendance.date.desc()).all()
+            result = []
+            for a in attendances:
+                result.append({
+                    "external_id": a.external_id,
+                    "date": a.date,
+                    "status": a.status,
+                    "participant": {
+                        "external_id": a.participant.external_id,
+                        "first_name": a.participant.first_name,
+                        "last_name": a.participant.last_name,
+                        "dni": a.participant.dni
+                    },
+                    "schedule": {
+                        "external_id": a.schedule.external_id,
+                        "day_of_week": a.schedule.day_of_week,
+                        "start_time": a.schedule.start_time,
+                        "end_time": a.schedule.end_time
+                    }
+                })
+            return success_response(
+                msg="Historial obtenido correctamente",
+                data=result
+            )
+        except Exception as e:
+            return error_response(f"Error interno: {str(e)}")

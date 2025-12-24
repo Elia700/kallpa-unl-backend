@@ -211,3 +211,103 @@ class AttendanceServiceMock:
             )
         except Exception as e:
             return error_response(f"Error interno: {e}")
+
+    # ==================== MÉTODOS PÚBLICOS PARA EL FRONTEND ====================
+
+    def obtener_participantes(self):
+        """Obtener todos los participantes (MOCK)"""
+        try:
+            participants = self._load(self.participants_path)
+            return success_response(
+                msg="Participantes obtenidos correctamente (MOCK)",
+                data=participants
+            )
+        except Exception as e:
+            return error_response(f"Error interno: {e}")
+
+    def obtener_schedules(self):
+        """Obtener todos los horarios/schedules (MOCK)"""
+        try:
+            schedules = self._load(self.schedules_path)
+            return success_response(
+                msg="Horarios obtenidos correctamente (MOCK)",
+                data=schedules
+            )
+        except Exception as e:
+            return error_response(f"Error interno: {e}")
+
+    def obtener_sesiones_hoy(self):
+        """Obtener las sesiones programadas para hoy (MOCK)"""
+        try:
+            schedules = self._load(self.schedules_path)
+            hoy = date.today().isoformat()
+            
+            # Mapear día de la semana
+            dias_semana = {
+                0: "Lunes", 1: "Martes", 2: "Miércoles", 
+                3: "Jueves", 4: "Viernes", 5: "Sábado", 6: "Domingo"
+            }
+            dia_hoy = dias_semana.get(date.today().weekday(), "")
+            
+            # Filtrar schedules del día de hoy
+            sesiones_hoy = [s for s in schedules if s.get("dayOfWeek", "").lower() == dia_hoy.lower()]
+            
+            return success_response(
+                msg="Sesiones de hoy obtenidas correctamente (MOCK)",
+                data={
+                    "date": hoy,
+                    "day": dia_hoy,
+                    "sessions": sesiones_hoy
+                }
+            )
+        except Exception as e:
+            return error_response(f"Error interno: {e}")
+
+    def obtener_historial(self, date_from=None, date_to=None):
+        """Obtener historial de asistencias con rango de fechas (MOCK)"""
+        try:
+            registros = self._load()
+            participants = self._load(self.participants_path)
+            schedules = self._load(self.schedules_path)
+            
+            # Crear diccionarios para lookup rápido
+            participants_dict = {p.get("external_id"): p for p in participants}
+            schedules_dict = {s.get("external_id"): s for s in schedules}
+            
+            # Filtrar por rango de fechas si se proporciona
+            if date_from:
+                registros = [r for r in registros if r.get("date", "") >= date_from]
+            if date_to:
+                registros = [r for r in registros if r.get("date", "") <= date_to]
+            
+            # Enriquecer los registros con datos de participante y schedule
+            historial = []
+            for r in registros:
+                participant = participants_dict.get(r.get("participant_external_id"), {})
+                schedule = schedules_dict.get(r.get("schedule_external_id"), {})
+                
+                historial.append({
+                    "external_id": r.get("external_id"),
+                    "date": r.get("date"),
+                    "status": r.get("status"),
+                    "participant": {
+                        "external_id": participant.get("external_id"),
+                        "first_name": participant.get("first_name", ""),
+                        "last_name": participant.get("last_name", ""),
+                        "dni": participant.get("dni", "")
+                    },
+                    "schedule": {
+                        "external_id": schedule.get("external_id"),
+                        "program_name": schedule.get("program_name", ""),
+                        "day_of_week": schedule.get("day_of_week", ""),
+                        "start_time": schedule.get("start_time", ""),
+                        "end_time": schedule.get("end_time", "")
+                    }
+                })
+            
+            return success_response(
+                msg="Historial obtenido correctamente (MOCK)",
+                data=historial
+            )
+        except Exception as e:
+            return error_response(f"Error interno: {e}")

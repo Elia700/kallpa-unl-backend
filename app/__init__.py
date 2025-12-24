@@ -18,5 +18,11 @@ def create_app():
         app.register_blueprint(user_bp, url_prefix='/api')
         from app.routes.attendance_routes import attendance_bp
         app.register_blueprint(attendance_bp, url_prefix='/api')
+        from app.routes.auth_routes import auth_bp
+        app.register_blueprint(auth_bp, url_prefix='/api')
+        from app.routes.assessment_routes import assessment_bp
+        app.register_blueprint(assessment_bp, url_prefix='/api')
+        from app.routes.evaluation_routes import evaluation_bp
+        app.register_blueprint(evaluation_bp, url_prefix='/api')
 
     return app

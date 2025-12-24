@@ -1,6 +1,5 @@
 from os import environ, path
 from dotenv import load_dotenv
-import urllib.parse
 
 config_dir = path.abspath(path.dirname(__file__)) 
 base_dir = path.abspath(path.join(config_dir, '..', '..')) 
@@ -17,16 +16,14 @@ class Config:
     host = environ.get("PGHOST")
     db = environ.get("PGDATABASE")
     port = environ.get("PGPORT", "5432")
-    
-    # URL encode password para evitar problemas con caracteres especiales
-    encoded_password = urllib.parse.quote_plus(password) if password else ''
-    
-    print(f'postgresql://{user}:****@{host}:{port}/{db}')
-    SECRET_KEY = environ.get("SECRET_KEY")
+    print(f'postgresql://{user}:{password}@{host}:{port}/{db}')
     JWT_SECRET_KEY = environ.get("JWT_SECRET_KEY")
 
-    #SQLAlchemy configuration - usar psycopg (v3) en lugar de psycopg2
-    SQLALCHEMY_DATABASE_URI = f'postgresql+psycopg://{user}:{encoded_password}@{host}:{port}/{db}'
+    # [NUEVO] URL del API externo (Docker del profesor)
+    PERSON_API_URL = "http://localhost:8096/api/person"
+
+    #SQLAlchemy configuration
+    SQLALCHEMY_DATABASE_URI = f'postgresql://{user}:{password}@{host}:{port}/{db}?client_encoding=utf8'
     
     SQLALCHEMY_ECHO = True
     SQLALCHEMY_RECORS_QUERIES = True

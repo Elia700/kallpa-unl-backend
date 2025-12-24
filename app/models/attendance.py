@@ -1,17 +1,20 @@
 from app import db
-from datetime import datetime
+import uuid
 
 class Attendance(db.Model):
     __tablename__ = "attendance"
+
     id = db.Column(db.Integer, primary_key=True)
-    external_id = db.Column(db.String(100), unique=True, nullable=True)
-    participant_id = db.Column(db.Integer, db.ForeignKey('participant.id'), nullable=False)
+    external_id = db.Column(
+        db.String(36), default=lambda: str(uuid.uuid4()), unique=True, nullable=False
+    )
     date = db.Column(db.String(50), nullable=False)
     status = db.Column(db.String(20), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    
+    participant_id = db.Column(
+        db.Integer, db.ForeignKey("participant.id"), nullable=False
+    )
+    schedule_id = db.Column(db.Integer, db.ForeignKey("schedule.id"), nullable=False)
+
     class Status:
         PRESENT = "present"
         ABSENT = "absent"
-

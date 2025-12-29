@@ -9,15 +9,15 @@
         "maxSlots": 30
     },
     {
-        "external_id": "e0ae4444-e1d6-4699-930d-284ebee44cf1",
+        "external_id": "48ef0406-4cbd-4409-a8f7-1d8b8ae38f93",
         "program_id": 1,
         "program_name": "Programa 1",
-        "day_of_week": "tuesday",
+        "day_of_week": "monday",
         "start_time": "08:00",
         "end_time": "09:00",
-        "name": "kmljksd",
-        "location": "scas",
+        "name": "prueba ",
+        "location": "Gimnasio principal ",
         "capacity": 30,
-        "description": "sadfad"
+        "description": "hola "
     }
 ]

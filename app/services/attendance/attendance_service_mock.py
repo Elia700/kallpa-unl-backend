@@ -299,9 +299,9 @@ class AttendanceServiceMock:
                     "schedule": {
                         "external_id": schedule.get("external_id"),
                         "name": schedule.get("name", ""),
-                        "dayOfWeek": schedule.get("dayOfWeek", ""),
-                        "startTime": schedule.get("startTime", ""),
-                        "endTime": schedule.get("endTime", "")
+                        "dayOfWeek": schedule.get("dayOfWeek") or schedule.get("day_of_week", ""),
+                        "startTime": schedule.get("startTime") or schedule.get("start_time", ""),
+                        "endTime": schedule.get("endTime") or schedule.get("end_time", "")
                     }
                 })
             
@@ -348,8 +348,9 @@ class AttendanceServiceMock:
             schedule = next((s for s in schedules if str(s.get("external_id")) == str(schedule_id)), None)
             
             # Calcular la fecha basándose en el día de la semana del schedule
-            if schedule and schedule.get("dayOfWeek"):
-                fecha = self._calcular_fecha_para_dia_semana(schedule.get("dayOfWeek"))
+            day_of_week = schedule.get("dayOfWeek") or schedule.get("day_of_week") if schedule else None
+            if day_of_week:
+                fecha = self._calcular_fecha_para_dia_semana(day_of_week)
             else:
                 fecha = data.get("date", date.today().isoformat())
             

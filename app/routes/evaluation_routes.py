@@ -19,3 +19,14 @@ def register_evaluation():
 def apply_test():
     data = request.json
     return response_handler(controller.apply_test(data))
+
+
+@evaluation_bp.route("/history", methods=["GET"])
+def history():
+    participant_external_id = request.args.get("participant_external_id")
+    test_external_id = request.args.get("test_external_id")
+    try:
+        months = int(request.args.get("months", 6))
+    except (ValueError, TypeError):
+        months = 6
+    return response_handler(controller.history(participant_external_id, test_external_id, months))

@@ -8,3 +8,6 @@ class EvaluationController:
     def apply_test(self, data):
         return evaluation_service.apply_test(data)
 
+    def history(self, participant_external_id, test_external_id=None, months=6):
+        return evaluation_service.get_history(participant_external_id, test_external_id, months)
+

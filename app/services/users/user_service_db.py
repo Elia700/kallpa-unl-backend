@@ -26,6 +26,7 @@ class UserServiceDB:
                     "lastName": p.lastName,
                     "email": p.email,
                     "dni": p.dni,
+                    "age": p.age,
                     "status": p.status,
                     "type": p.type,
                     "java_external": p.java_external,

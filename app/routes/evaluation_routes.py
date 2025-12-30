@@ -9,6 +9,9 @@ def response_handler(result):
     status_code = result.get("code", 200)
     return jsonify(result), status_code
 
+@evaluation_bp.route("/list-test", methods=["GET"])
+def list_test():
+    return response_handler(controller.list())
 
 @evaluation_bp.route("/save-test", methods=["POST"])
 def register_evaluation():

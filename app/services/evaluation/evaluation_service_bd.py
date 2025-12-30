@@ -11,7 +11,40 @@ import calendar
 
 
 class EvaluationServiceDB:
+    
+    def list_tests(self):
+        try:
+            # Obtener todos los tests activos
+            tests = Test.query.filter_by(status="Activo").all()
 
+            result = []
+            for test in tests:
+                # Obtener ejercicios del test
+                exercises = TestExercise.query.filter_by(test_id=test.id).all()
+                exercises_data = [
+                    {
+                        "external_id": ex.external_id,
+                        "name": ex.name,
+                        "unit": ex.unit
+                    } for ex in exercises
+                ]
+
+                # Armar el objeto del test con sus ejercicios
+                result.append({
+                    "external_id": test.external_id,
+                    "name": test.name,
+                    "description": test.description,
+                    "frequency_months": test.frequency_months,
+                    "exercises": exercises_data
+                })
+
+            return success_response(
+                msg="Listado de tests con ejercicios",
+                data=result
+            )
+
+        except Exception as e:
+            return error_response(f"Internal error: {str(e)}")
     def register_test(self, data):
         try:
             #  validacion general 

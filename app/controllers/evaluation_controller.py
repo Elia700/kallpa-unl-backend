@@ -1,7 +1,10 @@
 from app.services import evaluation_service
 
 class EvaluationController:
-
+    
+    def list(self):
+        return evaluation_service.list_tests()
+    
     def register(self, data):
         return evaluation_service.register_test(data)
     

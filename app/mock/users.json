@@ -228,5 +228,18 @@
     "status": "ACTIVO",
     "type": "ESTUDIANTE",
     "java_synced": false
+  },
+  {
+    "id": 34,
+    "firstName": "Lucas",
+    "lastName": "Pereira",
+    "age": 29,
+    "dni": "1150464228",
+    "phone": "0963632122",
+    "email": "1150464228@participante.local",
+    "address": "Lojia",
+    "status": "ACTIVO",
+    "type": "ESTUDIANTE",
+    "java_synced": false
   }
 ]

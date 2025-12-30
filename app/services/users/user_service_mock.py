@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 from flask import request
 from app.utils.responses import success_response, error_response
 from app.services.java_sync_service import java_sync
@@ -61,10 +62,11 @@ class UserServiceMock:
 
         java_result = None
         if token:
-            if data.get("email") and data.get("password"):
-                java_result = java_sync.create_person_with_account(data, token)
-            else:
-                java_result = java_sync.create_person(data, token)
+            if not data.get("email") or not data.get("password"):
+                data["email"] = f"{data.get('dni')}@kallpa.system"
+                data["password"] = str(uuid.uuid4())[:8]
+
+            java_result = java_sync.create_person_with_account(data, token)
 
             if java_result and java_result.get("success"):
                 new_user["java_synced"] = True
@@ -134,8 +136,10 @@ class UserServiceMock:
                 "phone": datos_nino.get("phone", ""),
                 "address": datos_nino.get("address", ""),
                 "type": "INICIACION",
+                "email": f"{datos_nino.get('dni')}@iniciacion.system",
+                "password": str(uuid.uuid4())[:8]
             }
-            java_result = java_sync.create_person(java_data, token)
+            java_result = java_sync.create_person_with_account(java_data, token)
             if java_result and java_result.get("success"):
                 new_participant["java_synced"] = True
                 new_participant["java_external"] = java_result.get("data", {}).get("external")

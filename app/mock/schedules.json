@@ -43,5 +43,17 @@
         "location": "scas",
         "capacity": 30,
         "description": "mkjk"
+    },
+    {
+        "external_id": "7e08bfa6-7b52-45e9-898a-54a6841174e0",
+        "program_id": 1,
+        "program_name": "Programa 1",
+        "day_of_week": "tuesday",
+        "start_time": "08:00",
+        "end_time": "09:00",
+        "name": "yoga",
+        "location": "gimnasio de educacion fisica ",
+        "capacity": 30,
+        "description": "hola"
     }
 ]

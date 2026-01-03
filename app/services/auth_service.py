@@ -21,7 +21,7 @@ class AuthService:
                 {
                     "sub": user.external_id,
                     "email": user.email,
-                    "rol": user.role,
+                    "role": user.role,
                 }
             )
 
@@ -45,7 +45,7 @@ class AuthService:
                 {
                     "sub": "usuario-mock-bypass",
                     "email": email,
-                    "rol": "admin",
+                    "role": "admin",
                 }
             )
 
@@ -56,7 +56,7 @@ class AuthService:
                 "user": {
                     "external_id": "usuario-mock-bypass",
                     "email": email,
-                    "rol": "admin",
+                    "role": "admin",
                 },
                 "code": 200,
             }

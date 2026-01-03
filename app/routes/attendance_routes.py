@@ -208,7 +208,8 @@ def get_history_simple():
     start_date = request.args.get("startDate") or request.args.get("date_from")
     end_date = request.args.get("endDate") or request.args.get("date_to")
     schedule_id = request.args.get("scheduleId")
-    result = controller.get_history(start_date, end_date, schedule_id)
+    day_filter = request.args.get("day")  # Filter by day of week (monday, tuesday, etc.)
+    result = controller.get_history(start_date, end_date, schedule_id, day_filter)
     return response_handler(result)
 
 

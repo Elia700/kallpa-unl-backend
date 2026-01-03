@@ -57,9 +57,9 @@ class AttendanceController:
         """Obtener las sesiones programadas para hoy"""
         return attendance_service.get_today_sessions()
 
-    def get_history(self, date_from=None, date_to=None, schedule_id=None):
+    def get_history(self, date_from=None, date_to=None, schedule_id=None, day_filter=None):
         """Obtener historial de asistencias"""
-        return attendance_service.get_history(date_from, date_to, schedule_id)
+        return attendance_service.get_history(date_from, date_to, schedule_id, day_filter)
 
     def register_public_attendance(self, data):
         """Registrar asistencia desde el frontend"""

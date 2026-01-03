@@ -259,8 +259,29 @@ class AttendanceServiceMock:
             # Filtrar schedules del día de hoy
             today_sessions = []
             for s in schedules:
-                day = (s.get("dayOfWeek") or s.get("day_of_week") or "").lower()
-                if day == today_weekday_en:
+                is_today = False
+                
+                # Verificar si es una fecha específica
+                specific_date = s.get("specific_date") or s.get("fecha_especifica")
+                if specific_date:
+                    is_today = (specific_date == today)
+                else:
+                    # Verificar día de la semana recurrente
+                    day = (s.get("dayOfWeek") or s.get("day_of_week") or "").lower()
+                    if day == today_weekday_en:
+                        # Si tiene rango de fechas, verificar que estamos dentro del rango
+                        start_date = s.get("start_date")
+                        end_date = s.get("end_date")
+                        if start_date and end_date:
+                            is_today = (start_date <= today <= end_date)
+                        elif start_date:
+                            is_today = (today >= start_date)
+                        elif end_date:
+                            is_today = (today <= end_date)
+                        else:
+                            is_today = True  # Recurrente sin restricciones de fecha
+                
+                if is_today:
                     # Contar asistencias de esta sesión para hoy
                     schedule_id = s.get("external_id")
                     session_attendances = [r for r in records 
@@ -277,7 +298,9 @@ class AttendanceServiceMock:
                         "program_name": s.get("program_name", ""),
                         "location": s.get("location", ""),
                         "attendance_count": present_count,
-                        "participant_count": len(participants)
+                        "participant_count": len(participants),
+                        "specific_date": specific_date,
+                        "is_recurring": s.get("is_recurring", True)
                     }
                     today_sessions.append(session)
             
@@ -292,7 +315,7 @@ class AttendanceServiceMock:
         except Exception as e:
             return error_response(f"Error interno: {e}")
 
-    def get_history(self, date_from=None, date_to=None, schedule_id=None):
+    def get_history(self, date_from=None, date_to=None, schedule_id=None, day_filter=None):
         """Obtener historial de asistencias con rango de fechas (MOCK)"""
         try:
             records = self._load()
@@ -313,6 +336,25 @@ class AttendanceServiceMock:
             if schedule_id:
                 records = [r for r in records if r.get("schedule_external_id") == schedule_id]
             
+            # Filtrar por día de la semana si se proporciona
+            if day_filter and day_filter.lower() != "todos los días":
+                # Mapear días en español a inglés
+                day_map_es_to_en = {
+                    'lunes': 'monday', 'martes': 'tuesday', 'miércoles': 'wednesday',
+                    'miercoles': 'wednesday', 'jueves': 'thursday', 'viernes': 'friday',
+                    'sábado': 'saturday', 'sabado': 'saturday', 'domingo': 'sunday'
+                }
+                day_en = day_map_es_to_en.get(day_filter.lower(), day_filter.lower())
+                
+                # Filtrar records por día de la semana del schedule
+                filtered_records = []
+                for r in records:
+                    schedule = schedules_dict.get(r.get("schedule_external_id"), {})
+                    schedule_day = (schedule.get("day_of_week") or schedule.get("dayOfWeek") or "").lower()
+                    if schedule_day == day_en:
+                        filtered_records.append(r)
+                records = filtered_records
+            
             # Agrupar por schedule_id y fecha para el formato esperado por el frontend
             grouped = {}
             for r in records:
@@ -323,6 +365,7 @@ class AttendanceServiceMock:
                         "schedule_id": r.get("schedule_external_id"),
                         "schedule_name": schedule.get("name", ""),
                         "date": r.get("date"),
+                        "day_of_week": schedule.get("day_of_week") or schedule.get("dayOfWeek", ""),
                         "start_time": schedule.get("startTime") or schedule.get("start_time", ""),
                         "end_time": schedule.get("endTime") or schedule.get("end_time", ""),
                         "presentes": 0,
@@ -571,14 +614,34 @@ class AttendanceServiceMock:
             description = data.get("description") or data.get("descripcion", "")
             program_id = data.get("program_id", 1)
             
+            # Nuevos campos para fechas específicas
+            start_date = data.get("start_date") or data.get("fecha_inicio")  # Fecha inicio del periodo
+            end_date = data.get("end_date") or data.get("fecha_fin")  # Fecha fin del periodo
+            specific_date = data.get("specific_date") or data.get("fecha_especifica")  # Fecha única específica
+            is_recurring = data.get("is_recurring", True)  # Si es recurrente o fecha única
+            
             if not name:
                 return error_response("Falta el campo: name/nombre")
-            if not day:
-                return error_response("Falta el campo: day_of_week/dia")
+            if not day and not specific_date:
+                return error_response("Falta el campo: day_of_week/dia o specific_date/fecha_especifica")
             if not start_time:
                 return error_response("Falta el campo: start_time/hora_inicio")
             if not end_time:
                 return error_response("Falta el campo: end_time/hora_fin")
+            
+            # Si hay fecha específica, derivar el día de la semana de ella
+            if specific_date:
+                from datetime import datetime
+                try:
+                    specific_date_obj = datetime.strptime(specific_date, "%Y-%m-%d")
+                    weekdays_en = {
+                        0: "monday", 1: "tuesday", 2: "wednesday", 
+                        3: "thursday", 4: "friday", 5: "saturday", 6: "sunday"
+                    }
+                    day = weekdays_en.get(specific_date_obj.weekday(), "monday")
+                    is_recurring = False
+                except ValueError:
+                    return error_response("Formato de fecha inválido. Use: YYYY-MM-DD")
             
             # Mapear día a inglés si viene en español
             day_map = {
@@ -586,7 +649,7 @@ class AttendanceServiceMock:
                 'miércoles': 'wednesday', 'jueves': 'thursday', 'viernes': 'friday',
                 'sabado': 'saturday', 'sábado': 'saturday', 'domingo': 'sunday'
             }
-            day_lower = day.lower()
+            day_lower = day.lower() if day else ""
             day_en = day_map.get(day_lower, day_lower)
             
             schedules = self._load(self.schedules_path)
@@ -601,7 +664,11 @@ class AttendanceServiceMock:
                 "name": name,
                 "location": location,
                 "capacity": capacity,
-                "description": description
+                "description": description,
+                "start_date": start_date,
+                "end_date": end_date,
+                "specific_date": specific_date,
+                "is_recurring": is_recurring
             }
             
             schedules.append(new_schedule)
@@ -655,6 +722,28 @@ class AttendanceServiceMock:
                 found_schedule["capacity"] = data.get("capacity") or data.get("capacidad")
             if data.get("description") or data.get("descripcion"):
                 found_schedule["description"] = data.get("description") or data.get("descripcion")
+            
+            # Nuevos campos de fecha
+            if data.get("start_date") or data.get("fecha_inicio"):
+                found_schedule["start_date"] = data.get("start_date") or data.get("fecha_inicio")
+            if data.get("end_date") or data.get("fecha_fin"):
+                found_schedule["end_date"] = data.get("end_date") or data.get("fecha_fin")
+            if data.get("specific_date") or data.get("fecha_especifica"):
+                specific_date = data.get("specific_date") or data.get("fecha_especifica")
+                found_schedule["specific_date"] = specific_date
+                # Derivar día de la semana de la fecha específica
+                from datetime import datetime
+                try:
+                    specific_date_obj = datetime.strptime(specific_date, "%Y-%m-%d")
+                    weekdays_en = {
+                        0: "monday", 1: "tuesday", 2: "wednesday", 
+                        3: "thursday", 4: "friday", 5: "saturday", 6: "sunday"
+                    }
+                    found_schedule["day_of_week"] = weekdays_en.get(specific_date_obj.weekday(), "monday")
+                except ValueError:
+                    pass
+            if "is_recurring" in data:
+                found_schedule["is_recurring"] = data.get("is_recurring")
             
             self._save(schedules, self.schedules_path)
             

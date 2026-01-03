@@ -41,3 +41,5 @@ class UserController:
         """
         return user_service.create_participant(data)
 
+    def create_user(self, data):
+        return user_service.create_user(data)

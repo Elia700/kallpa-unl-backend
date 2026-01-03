@@ -433,7 +433,7 @@ class UserServiceDB:
                     }
 
             # ---------- Validar rol ----------
-            allowed_roles = ["DOCENTE", "PASANTE"]
+            allowed_roles = ["DOCENTE", "PASANTE", "ADMINISTRADOR"]
             if data["role"] not in allowed_roles:
                 return {"status": "error", "msg": "Rol inválido", "code": 400}
 

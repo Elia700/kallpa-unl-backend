@@ -38,6 +38,69 @@ class UserServiceDB:
         except Exception:
             return error_response("Error interno del servidor", code=500)
 
+    def get_participants_only(self):
+        """Obtiene solo los participantes (excluye docentes, administrativos, pasantes)."""
+        try:
+            # Tipos que NO son participantes (son staff/profesores)
+            staff_types = ["DOCENTE", "ADMINISTRATIVO", "PASANTE", "PROFESOR", "ADMIN"]
+            
+            # Filtrar solo participantes activos que no sean staff
+            participants = Participant.query.filter(
+                Participant.status == "ACTIVO",
+                ~Participant.type.in_(staff_types)
+            ).all()
+
+            data = [
+                {
+                    "external_id": p.external_id,
+                    "firstName": p.firstName,
+                    "lastName": p.lastName,
+                    "email": p.email,
+                    "dni": p.dni,
+                    "age": p.age,
+                    "phone": p.phone,
+                    "status": p.status,
+                    "type": p.type,
+                }
+                for p in participants
+            ]
+
+            return success_response(
+                msg="Participantes obtenidos correctamente",
+                data=data
+            )
+        except Exception as e:
+            return error_response(f"Error interno del servidor: {str(e)}", code=500)
+
+    def get_pasantes(self):
+        """Obtiene solo los pasantes."""
+        try:
+            pasantes = Participant.query.filter(
+                Participant.type == "PASANTE"
+            ).all()
+
+            data = [
+                {
+                    "external_id": p.external_id,
+                    "firstName": p.firstName,
+                    "lastName": p.lastName,
+                    "email": p.email,
+                    "dni": p.dni,
+                    "age": p.age,
+                    "phone": p.phone,
+                    "status": p.status,
+                    "type": p.type,
+                }
+                for p in pasantes
+            ]
+
+            return success_response(
+                msg="Pasantes obtenidos correctamente",
+                data=data
+            )
+        except Exception as e:
+            return error_response(f"Error interno del servidor: {str(e)}", code=500)
+
     def create_user(self, data):
         """Crea usuario en PostgreSQL y lo sincroniza con el microservicio Java."""
         token = self._get_token()

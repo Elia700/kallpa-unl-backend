@@ -157,6 +157,13 @@ def delete_session_attendance(schedule_id, date):
 # ========== RUTAS SIMPLIFICADAS PARA EL NUEVO FRONTEND ==========
 # Estas rutas son más simples y coinciden con lo que espera el nuevo frontend
 
+@attendance_bp.route("/attendance/participants", methods=["GET"])
+def get_participants_simple():
+    """Obtener todos los participantes (ruta simplificada)"""
+    result = controller.get_participants()
+    return response_handler(result)
+
+
 @attendance_bp.route("/attendance/schedules", methods=["GET"])
 def get_schedules_simple():
     """Obtener todos los horarios (ruta simplificada)"""

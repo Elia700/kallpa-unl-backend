@@ -1,4 +1,11 @@
 import os
+from os import path
+from dotenv import load_dotenv
+
+# Cargar .env antes de leer USE_MOCK
+config_dir = path.abspath(path.dirname(__file__))
+base_dir = path.abspath(path.join(config_dir, '..', '..'))
+load_dotenv(path.join(base_dir, '.env'))
 
 # USERS
 from app.services.users.user_service_mock import UserServiceMock
@@ -18,6 +25,7 @@ from app.services.evaluation.evaluation_service_bd import EvaluationServiceDB
 
 # Get USE_MOCK from environment variable
 USE_MOCK = os.getenv('USE_MOCK', 'false').lower() == 'true'
+print(f"[Services] USE_MOCK = {USE_MOCK}")
 
 if USE_MOCK:
     user_service = UserServiceMock()

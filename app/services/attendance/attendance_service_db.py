@@ -489,7 +489,56 @@ class AttendanceServiceDB:
                     'sábado': 'saturday', 'sabado': 'saturday', 'domingo': 'sunday'
                 }
                 day_en = day_map_es_to_en.get(day_filter.lower(), day_filter.lower())
-                attendances = [a for a in attendances if a.schedule.dayOfWeek.lower() == day_en]
+                
+                # Función para obtener el día de la semana de una fecha
+                def get_day_of_week_from_date(date_str):
+                    from datetime import datetime
+                    days_en = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+                    try:
+                        date_obj = datetime.strptime(str(date_str), '%Y-%m-%d')
+                        return days_en[date_obj.weekday()]
+                    except:
+                        return None
+                
+                # Filtrar: usar dayOfWeek del schedule, o inferir del specificDate, o de la fecha del attendance
+                def matches_day(a):
+                    # Primero intentar con dayOfWeek del schedule
+                    if a.schedule.dayOfWeek:
+                        return a.schedule.dayOfWeek.lower() == day_en
+                    # Si no hay dayOfWeek, inferir de specificDate del schedule
+                    if a.schedule.specificDate:
+                        inferred_day = get_day_of_week_from_date(a.schedule.specificDate)
+                        return inferred_day == day_en
+                    # Si no hay specificDate, inferir de la fecha del attendance
+                    if a.date:
+                        inferred_day = get_day_of_week_from_date(a.date)
+                        return inferred_day == day_en
+                    return False
+                
+                attendances = [a for a in attendances if matches_day(a)]
+            
+            # Función para obtener el día de la semana (mover fuera del if para reutilizar)
+            def get_day_of_week(schedule, attendance_date):
+                from datetime import datetime
+                days_en = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+                # Primero usar dayOfWeek del schedule si existe
+                if schedule.dayOfWeek:
+                    return schedule.dayOfWeek
+                # Si no, inferir de specificDate
+                if schedule.specificDate:
+                    try:
+                        date_obj = datetime.strptime(str(schedule.specificDate), '%Y-%m-%d')
+                        return days_en[date_obj.weekday()]
+                    except:
+                        pass
+                # Si no, inferir de la fecha del attendance
+                if attendance_date:
+                    try:
+                        date_obj = datetime.strptime(str(attendance_date), '%Y-%m-%d')
+                        return days_en[date_obj.weekday()]
+                    except:
+                        pass
+                return None
             
             # Agrupar por schedule_id y fecha (igual que el mock)
             grouped = {}
@@ -500,7 +549,7 @@ class AttendanceServiceDB:
                         "schedule_id": a.schedule.external_id,
                         "schedule_name": a.schedule.name,
                         "date": a.date,
-                        "day_of_week": a.schedule.dayOfWeek,
+                        "day_of_week": get_day_of_week(a.schedule, a.date),
                         "start_time": a.schedule.startTime,
                         "end_time": a.schedule.endTime,
                         "presentes": 0,

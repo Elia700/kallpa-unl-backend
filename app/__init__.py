@@ -10,6 +10,7 @@ def create_app():
     app.config.from_object(Config)
     db.init_app(app)
     CORS(app, origins=["http://localhost:3000", "http://localhost:4200", "http://localhost:3001", "http://localhost:8080"], supports_credentials=True)
+    
     with app.app_context():
         from app import models
         db.create_all()

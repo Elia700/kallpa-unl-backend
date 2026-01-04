@@ -14,6 +14,10 @@ class UserController:
         """Obtiene solo pasantes"""
         return user_service.get_interns()
 
+    def get_pasantes(self):
+        """Obtiene solo pasantes (alias)"""
+        return user_service.get_pasantes()
+
     def create_user(self, data):
         return user_service.create_user(data)
 
@@ -33,13 +37,9 @@ class UserController:
         """Busca exclusivamente en el microservicio Java."""
         return user_service.search_in_java(dni)
 
-    #Revisar Josep
     def create_participant(self, data):
         """
         Registra un participante (mayor o menor de edad).
         Si es menor, espera datos de responsable.
         """
         return user_service.create_participant(data)
-
-    def create_user(self, data):
-        return user_service.create_user(data)

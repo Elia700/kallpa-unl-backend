@@ -33,9 +33,9 @@ class AttendanceController:
 
     # ========== MÉTODOS PÚBLICOS PARA EL FRONTEND ==========
 
-    def get_participants(self):
+    def get_participants(self, program=None):
         """Obtener todos los participantes"""
-        return attendance_service.get_participants()
+        return attendance_service.get_participants(program)
 
     def get_schedules(self):
         """Obtener todos los horarios"""

@@ -27,6 +27,13 @@ def listar_participantes():
     return response_handler(result)
 
 
+@user_bp.route("/users/pasantes", methods=["GET"])
+def listar_pasantes():
+    """Obtiene solo pasantes"""
+    result = controller.get_interns()
+    return response_handler(result)
+
+
 @user_bp.route("/users", methods=["POST"])
 def crear_user():
     data = request.json

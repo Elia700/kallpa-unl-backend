@@ -40,6 +40,31 @@ class UserServiceDB:
         except Exception:
             return error_response("Error interno del servidor", code=500)
 
+    def get_participants_only(self):
+        """Obtiene solo participantes (alias de get_all_users por ahora)"""
+        return self.get_all_users()
+
+    def get_interns(self):
+        """Obtiene usuarios con rol PASANTE"""
+        try:
+            interns = User.query.filter_by(role="PASANTE").all()
+            data = [
+                {
+                    "external_id": u.external_id,
+                    "firstName": u.firstName,
+                    "lastName": u.lastName,
+                    "email": u.email,
+                    "dni": u.dni,
+                    "status": u.status,
+                    "type": "PASANTE",
+                    "java_external": u.java_external
+                }
+                for u in interns
+            ]
+            return success_response(msg="Pasantes listados correctamente", data=data)
+        except Exception as e:
+            return error_response(f"Error obteniendo pasantes: {str(e)}", code=500)
+
     def create_user(self, data):
         """Crea usuario en PostgreSQL y lo sincroniza con el microservicio Java."""
         token = self._get_token()
@@ -53,6 +78,12 @@ class UserServiceDB:
                         msg="Usuario ya existe en el sistema central", code=400
                     )
 
+            # Validate program
+            program = data.get("program")
+            valid_programs = ["INICIACION", "FUNCIONAL"]
+            if program and program not in valid_programs:
+                return error_response(f"Programa inválido. Use: {valid_programs}")
+
             participant = Participant(
                 firstName=data.get("firstName"),
                 lastName=data.get("lastName"),
@@ -63,6 +94,7 @@ class UserServiceDB:
                 address=data.get("address"),
                 status="ACTIVO",
                 type=data.get("type", "EXTERNO"),
+                program=data.get("program")
             )
 
             java_synced = False
@@ -297,11 +329,17 @@ class UserServiceDB:
             # 1. Validaciones
             self._validate_participant(participant_data, responsible_data, is_minor)
 
+            # Validate program (Phase 3 requirement)
+            valid_programs = ["INICIACION", "FUNCIONAL"]
+            program = participant_data.get("program")
+            if program and program not in valid_programs:
+                return error_response(f"Programa inválido. Use: {valid_programs}")
+
             # 2. Verificar en Java
             self._check_java_duplicate(participant_data, token)
 
             # 3. Crear participante
-            participant = self._build_participant(participant_data, is_minor)
+            participant = self._build_participant(participant_data, is_minor, program)
             db.session.add(participant)
 
             # # 4. Sincronizar Java
@@ -342,7 +380,7 @@ class UserServiceDB:
         if is_minor and not responsible:
             raise Exception("Se requieren datos del responsable")
 
-    def _build_participant(self, data, is_minor):
+    def _build_participant(self, data, is_minor, program=None):
         return Participant(
             firstName=data.get("firstName"),
             lastName=data.get("lastName"),
@@ -353,6 +391,7 @@ class UserServiceDB:
             address=data.get("address"),
             status="ACTIVO",
             type="INICIACION" if is_minor else data.get("type", "EXTERNO"),
+            program=program
         )
 
     def _create_responsible(self, data, participant):

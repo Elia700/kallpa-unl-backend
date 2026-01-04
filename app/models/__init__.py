@@ -1,6 +1,6 @@
 from .attendance import Attendance
 from .participant import Participant
-from .program import Program
+
 from .responsible import Responsible
 from .schedule import Schedule
 from .assessment import Assessment
@@ -16,7 +16,7 @@ from .user import User
 __all__ = [
     "Attendance",
     "Participant",
-    "Program",
+
     "Responsible",
     "Schedule",
     "Assessment",

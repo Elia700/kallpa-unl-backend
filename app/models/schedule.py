@@ -14,8 +14,8 @@ class Schedule(db.Model):
     startTime = db.Column(db.String(10), nullable=False)
     endTime = db.Column(db.String(10), nullable=False)
     maxSlots = db.Column(db.Integer, nullable=False)
-    program_id = db.Column(db.Integer, db.ForeignKey("program.id"), nullable=False)
-    attendances = db.relationship("Attendance", backref="schedule", lazy=True)
+    program = db.Column(db.String(100), nullable=False)
+    # attendances = db.relationship("Attendance", backref="schedule", lazy=True)
 
     def __repr__(self):
         return f"<Schedule {self.name}>"

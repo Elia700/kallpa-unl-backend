@@ -54,8 +54,6 @@ class UserServiceMock:
     def get_pasantes(self):
         """Obtiene solo los pasantes."""
         users = self._load()
-        
-        # Filtrar solo pasantes
         pasantes = [
             u for u in users 
             if u.get("type", "").upper() == "PASANTE"
@@ -270,3 +268,88 @@ class UserServiceMock:
             )
 
         return error_response(msg="Participante no encontrado en Java", code=404)
+
+    def get_interns(self):
+        """Obtiene solo los pasantes (alias de get_pasantes)."""
+        return self.get_pasantes()
+
+    def create_participant(self, data):
+        """
+        Registra un participante (mayor o menor de edad).
+        Si es menor (type=INICIACION), espera datos del responsable.
+        """
+        token = self._get_token()
+        users = self._load()
+
+        participant_type = data.get("type", "ESTUDIANTE").upper()
+
+        if participant_type == "INICIACION":
+            return self.create_initiation_participant(data)
+
+        required_fields = ["firstName", "lastName", "dni"]
+        for field in required_fields:
+            if not data.get(field):
+                return error_response(msg=f"Campo requerido: {field}", code=400)
+
+        dni = data.get("dni")
+
+        if dni and token:
+            java_search = java_sync.search_by_identification(dni, token)
+            if java_search.get("found"):
+                return error_response(
+                    msg="Participante ya existe en el sistema central",
+                    code=400
+                )
+
+        if dni:
+            for u in users:
+                if u.get("dni") == dni:
+                    return error_response(msg="Error: La cédula ya se encuentra registrada", code=400)
+
+        new_id = max([u.get("id", 0) for u in users], default=0) + 1
+
+        new_participant = {
+            "id": new_id,
+            "external_id": str(uuid.uuid4()),
+            "firstName": data.get("firstName"),
+            "lastName": data.get("lastName"),
+            "age": data.get("age"),
+            "dni": dni,
+            "phone": data.get("phone", ""),
+            "email": data.get("email", ""),
+            "address": data.get("address", ""),
+            "status": "ACTIVO",
+            "type": participant_type,
+        }
+
+        if token:
+            email = data.get("email") or f"{dni}@participante.local"
+            password = data.get("password") or str(uuid.uuid4())[:8]
+
+            java_data = {
+                "firstName": data.get("firstName"),
+                "lastName": data.get("lastName"),
+                "dni": dni,
+                "phone": data.get("phone", ""),
+                "address": data.get("address", ""),
+                "type": participant_type,
+                "email": email,
+                "password": password
+            }
+
+            java_result = java_sync.create_person_with_account(java_data, token)
+            if java_result and java_result.get("success"):
+                new_participant["java_synced"] = True
+                new_participant["java_external"] = java_result.get("data", {}).get("external")
+            else:
+                new_participant["java_synced"] = False
+                print(f"[UserServiceMock] No se pudo sincronizar con Java: {java_result}")
+
+        users.append(new_participant)
+        self._save(users)
+
+        return success_response(
+            msg="Participante registrado exitosamente (MOCK)" + (" y sincronizado con Java" if new_participant.get("java_synced") else ""),
+            data=new_participant,
+            code=201
+        )

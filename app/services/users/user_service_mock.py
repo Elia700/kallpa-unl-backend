@@ -38,10 +38,8 @@ class UserServiceMock:
     def get_participants_only(self):
         """Obtiene solo los participantes (excluye docentes, administrativos, pasantes)."""
         users = self._load()
-        # Tipos que NO son participantes (son staff/profesores)
         staff_types = ["DOCENTE", "ADMINISTRATIVO", "PASANTE", "PROFESOR", "ADMIN"]
         
-        # Filtrar solo participantes activos
         participants = [
             u for u in users 
             if u.get("type", "").upper() not in staff_types 
@@ -72,6 +70,13 @@ class UserServiceMock:
         """Crea usuario localmente y lo sincroniza con el microservicio Java."""
         token = self._get_token()
         users = self._load()
+        
+        users = self._load()
+        
+        required_fields = ["firstName", "lastName", "dni"]
+        for field in required_fields:
+            if not data.get(field):
+                return error_response(msg=f"Campo requerido: {field}", code=400)
 
         dni = data.get("dni")
         if dni and token:
@@ -81,6 +86,12 @@ class UserServiceMock:
                     msg="Usuario ya existe en el sistema central",
                     code=400
                 )
+
+
+        if dni:
+             for u in users:
+                 if u.get("dni") == dni:
+                     return error_response(msg="Error: La cédula ya se encuentra registrada", code=400)
 
         new_id = max([u.get("id", 0) for u in users], default=0) + 1
 

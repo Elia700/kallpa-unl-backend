@@ -302,22 +302,28 @@ class AttendanceServiceDB:
     def create_schedule(self, data):
         """Crear un nuevo horario/sesión"""
         try:
-            required = ["name", "day_of_week", "start_time", "end_time", "max_slots", "program"]
-            for field in required:
-                if field not in data:
-                    return error_response(f"Falta el campo requerido: {field}")
+            # Map camelCase inputs to snake_case if necessary
+            name = data.get("name")
+            day_of_week = data.get("day_of_week") or data.get("dayOfWeek")
+            start_time = data.get("start_time") or data.get("startTime")
+            end_time = data.get("end_time") or data.get("endTime")
+            max_slots = data.get("max_slots") or data.get("maxSlots")
+            program = data.get("program")
+
+            if not all([name, day_of_week, start_time, end_time, max_slots, program]):
+                return error_response(f"Faltan campos requeridos")
 
             valid_programs = ["INICIACION", "FUNCIONAL"]
-            if data["program"] not in valid_programs:
+            if program not in valid_programs:
                 return error_response(f"Programa inválido. Use: {valid_programs}")
 
             nuevo_schedule = Schedule(
-                name=data["name"],
-                dayOfWeek=data["day_of_week"],
-                startTime=data["start_time"],
-                endTime=data["end_time"],
-                maxSlots=data["max_slots"],
-                program=data["program"]
+                name=name,
+                dayOfWeek=day_of_week,
+                startTime=start_time,
+                endTime=end_time,
+                maxSlots=max_slots,
+                program=program
             )
             db.session.add(nuevo_schedule)
             db.session.commit()
@@ -341,10 +347,19 @@ class AttendanceServiceDB:
                 return error_response("Horario no encontrado", code=404)
 
             if "name" in data: schedule.name = data["name"]
-            if "day_of_week" in data: schedule.dayOfWeek = data["day_of_week"]
-            if "start_time" in data: schedule.startTime = data["start_time"]
-            if "end_time" in data: schedule.endTime = data["end_time"]
-            if "max_slots" in data: schedule.maxSlots = data["max_slots"]
+            
+            day_of_week = data.get("day_of_week") or data.get("dayOfWeek")
+            if day_of_week: schedule.dayOfWeek = day_of_week
+            
+            start_time = data.get("start_time") or data.get("startTime")
+            if start_time: schedule.startTime = start_time
+            
+            end_time = data.get("end_time") or data.get("endTime")
+            if end_time: schedule.endTime = end_time
+            
+            max_slots = data.get("max_slots") or data.get("maxSlots")
+            if max_slots: schedule.maxSlots = max_slots
+            
             if "program" in data: schedule.program = data["program"]
 
             db.session.commit()

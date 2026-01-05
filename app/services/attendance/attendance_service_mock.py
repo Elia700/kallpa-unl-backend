@@ -214,10 +214,14 @@ class AttendanceServiceMock:
 
     # ==================== MÉTODOS PÚBLICOS PARA EL FRONTEND ====================
 
-    def get_participants(self):
+    def get_participants(self, program=None):
         """Obtener todos los participantes (MOCK)"""
         try:
             participants = self._load(self.participants_path)
+            
+            if program:
+                 participants = [p for p in participants if str(p.get("program_id", "")) == str(program) or p.get("program_name") == program]
+
             return success_response(
                 msg="Participantes obtenidos correctamente (MOCK)",
                 data=participants

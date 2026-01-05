@@ -4,8 +4,7 @@ from .participant import Participant
 from .responsible import Responsible
 from .schedule import Schedule
 from .assessment import Assessment
-from .initialAssessment import InitialAssessment
-from .aerobicAssessment import AerobicAssessment
+
 from .periodicTest import PeriodicTest
 from .evaluation import Evaluation
 from .evaluationResult import EvaluationResult
@@ -20,8 +19,7 @@ __all__ = [
     "Responsible",
     "Schedule",
     "Assessment",
-    "InitialAssessment",
-    "AerobicAssessment",
+
     "PeriodicTest",
     "Evaluation",
     "EvaluationResult",

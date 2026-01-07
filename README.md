@@ -94,8 +94,6 @@ PGPASSWORD=1234
 PGHOST=localhost
 PGDATABASE=kallpa_bd
 PGPORT=5432
-
-USE_MOCK=false
 SECRET_KEY=kallpa123
 JWT_SECRET_KEY=jwt_secret_kallpa
 ```

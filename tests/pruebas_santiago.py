@@ -69,10 +69,10 @@ class TestMockScenarios(unittest.TestCase):
 
         assessment_payload = {
             "participant_external_id": participant_external_id,
-            "weight": 70,
+            "weight": 10,
             "height": 1.75,
-            "waistPerimeter": 80,
-            "wingspan": 170,
+            "waistPerimeter": 2,
+            "wingspan": 2,
             "date": "2025-01-05"
         }
 
@@ -161,7 +161,7 @@ class TestMockScenarios(unittest.TestCase):
         assessment_payload = {
             "participant_external_id": participant_external_id,
             "weight": 70,
-            "height": 3000,  #Valor irreal
+            "height": -800,  #Valor irreal
             "waistPerimeter": 80,
             "wingspan": 170,
             "date": "2025-01-05"

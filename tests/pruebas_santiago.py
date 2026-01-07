@@ -2,6 +2,8 @@ import unittest
 import requests
 import json
 import uuid
+import random
+import string
 
 BASE_URL = "http://127.0.0.1:5000/api"
 
@@ -11,6 +13,9 @@ class TestMockScenarios(unittest.TestCase):
         self.admin_email = "admin@kallpa.com"
         self.admin_password = "123456" 
         self.token = None
+
+    def _generate_numeric_string(self, length):
+        return ''.join(random.choices(string.digits, k=length))
 
     def test_tc_01_login_success(self):
         """TC-01: Inicio de Sesión - Ingreso exitoso"""
@@ -43,7 +48,7 @@ class TestMockScenarios(unittest.TestCase):
         participant_payload = {
             "firstName": "Carlos",
             "lastName": "Lopez",
-            "dni": f"10{unique_id}",
+            "dni": f"10{self._generate_numeric_string(8)}",
             "age": 25,
             "program": "FUNCIONAL",
             "type": "ESTUDIANTE",
@@ -88,7 +93,7 @@ class TestMockScenarios(unittest.TestCase):
         participant_payload = {
             "firstName": "Ana",
             "lastName": "Martinez",
-            "dni": f"11{unique_id}",
+            "dni": f"11{self._generate_numeric_string(8)}",
             "age": 30,
             "program": "FUNCIONAL",
             "type": "ESTUDIANTE",
@@ -133,7 +138,7 @@ class TestMockScenarios(unittest.TestCase):
         participant_payload = {
             "firstName": "Luis",
             "lastName": "Gomez",
-            "dni": f"12{unique_id}",
+            "dni": f"12{self._generate_numeric_string(8)}",
             "age": 28,
             "program": "FUNCIONAL",
             "type": "ESTUDIANTE",

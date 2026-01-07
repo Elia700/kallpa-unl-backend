@@ -200,5 +200,62 @@ class TestFinales(unittest.TestCase):
             data = response_assessment.json()["data"]
             print("Registro de Medidas Exitoso (TC-04):", data)
 
+
+    def _get_random_time_slot(self):
+        """Genera un slot de tiempo aleatorio para evitar solapamientos en tests"""
+        days = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
+        day = random.choice(days)
+        # Random start hour and MINUTE to minimize collisions
+        start_h = random.randint(7, 21)
+        start_m = random.randint(0, 59)
+        
+        # End time = Start + 1 hour (approx)
+        end_h = start_h + 1
+        return day, f"{start_h:02d}:{start_m:02d}", f"{end_h:02d}:{start_m:02d}"
+
+    def test_tc_05_create_schedule(self):
+        """TC-05: Crear Horario/Sesión - Con reintento por solapamiento (Migrado de TC-01)"""
+        max_retries = 10
+        for i in range(max_retries):
+            day, start, end = self._get_random_time_slot()
+            payload = {
+                "name": f"Sesión TC-05 {uuid.uuid4().hex[:4]}",
+                "startTime": start,
+                "endTime": end,
+                "program": "FUNCIONAL",
+                "maxSlots": 20,
+                "dayOfWeek": day
+            }
+            resp = requests.post(f"{BASE_URL}/attendance/v2/public/schedules", json=payload, headers=self._get_auth_headers())
+            if resp.status_code in [200, 201]:
+                print(f"TC-05: Horario creado -> {resp.json()}")
+                return
+            
+            # If overlap, retry
+            if resp.status_code == 400 and "solapa" in resp.text:
+                continue
+            
+            # If other error, fail
+            self.fail(f"TC-05 Fallo: {resp.text}")
+        
+        self.fail(f"TC-05: No se pudo crear horario tras {max_retries} intentos")
+
+    def test_tc_06_create_schedule_missing_fields(self):
+        """TC-06: Crear Horario - Faltan campos (Negativo) (Migrado de TC-04)"""
+        # Missing startTime and endTime
+        payload = {
+            "name": "Sesión Incompleta TC-06",
+            "program": "FUNCIONAL",
+            "dayOfWeek": "MONDAY"
+        }
+        resp = requests.post(
+            f"{BASE_URL}/attendance/v2/public/schedules", 
+            json=payload, 
+            headers=self._get_auth_headers()
+        )
+        self.assertEqual(resp.status_code, 400, f"TC-06: Debería fallar por campos faltantes. Status: {resp.status_code}")
+        self.assertIn("Faltan campos requeridos", resp.text)
+        print("TC-06: Validación de campos faltantes correcta")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

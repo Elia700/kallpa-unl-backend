@@ -33,10 +33,35 @@ class AttendanceController:
             if not schedule:
                 return error_response("Horario no encontrado", code=404)
 
+            fecha = data.get("date", date.today().isoformat())
+            try:
+                datetime.strptime(fecha, "%Y-%m-%d")
+            except ValueError:
+                return error_response("Formato de fecha inválido. Use YYYY-MM-DD")
+
+            # Check duplicates
+            existing_attendance = Attendance.query.filter_by(
+                participant_id=participant.id,
+                schedule_id=schedule.id,
+                date=fecha
+            ).first()
+            if existing_attendance:
+                 return error_response(f"El participante ya tiene asistencia registrada para esta fecha y horario")
+
+            # Check capacity
+            current_count = Attendance.query.filter_by(
+                schedule_id=schedule.id,
+                date=fecha,
+                status=Attendance.Status.PRESENT 
+            ).count()
+            
+            if current_count >= schedule.maxSlots:
+                return error_response(f"Cupos llenos para esta sesión ({schedule.maxSlots} slots)")
+
             nuevo = Attendance(
                 participant_id=participant.id,
                 schedule_id=schedule.id,
-                date=data.get("date", date.today().isoformat()),
+                date=fecha,
                 status=data["status"],
             )
             db.session.add(nuevo)
@@ -347,9 +372,39 @@ class AttendanceController:
             if program not in valid_programs:
                 return error_response(f"Programa inválido. Use: {valid_programs}")
 
+            valid_days = [
+                "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"
+            ]
+            if day_of_week.upper() not in valid_days:
+                return error_response(f"Día inválido. Use: {valid_days}")
+
+            import re
+            time_pattern = r'^([01]\d|2[0-3]):([0-5]\d)$'
+            if not re.match(time_pattern, start_time) or not re.match(time_pattern, end_time):
+               return error_response("Formato de hora inválido. Use HH:MM (24h)")
+            
+            if start_time >= end_time:
+                return error_response("La hora de inicio debe ser menor a la hora de fin")
+
+            if int(max_slots) <= 0:
+                return error_response("El número de cupos debe ser mayor a 0")
+
+            # Validate Overlaps
+            overlaps = Schedule.query.filter(
+                Schedule.dayOfWeek == day_of_week.upper(),
+                Schedule.program == program,
+                # (StartA < EndB) and (EndA > StartB)
+                Schedule.startTime < end_time,
+                Schedule.endTime > start_time
+                # Assuming simple active check isnt needed or status field missing
+            ).first()
+            
+            if overlaps:
+                return error_response(f"El horario se solapa con otro existente: {overlaps.name}")
+
             nuevo_schedule = Schedule(
                 name=name,
-                dayOfWeek=day_of_week,
+                dayOfWeek=day_of_week.upper(), # Store standardized
                 startTime=start_time,
                 endTime=end_time,
                 maxSlots=max_slots,

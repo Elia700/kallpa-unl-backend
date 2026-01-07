@@ -2,10 +2,14 @@ import unittest
 import requests
 import json
 import uuid
+import random
+import string
 
 BASE_URL = "http://127.0.0.1:5000/api"
 
 class TestFinales(unittest.TestCase):
+    def _generate_numeric_string(self, length):
+        return ''.join(random.choices(string.digits, k=length))
     
     def setUp(self):
         self.headers = {"Content-Type": "application/json"}
@@ -103,6 +107,98 @@ class TestFinales(unittest.TestCase):
              logging_err = resp_json.get("data", {})
              self.assertTrue("dni" in logging_err or "email" in logging_err, "Debe indicar error en DNI o Email")
              print(f"TC-02: Validación Duplicado - Error recibido: {response.text} - Correcto")
+
+    def test_tc_03_registro_exitoso_medidas_antropometricas(self):
+        """TC-03: Registro de medidas antropometricas - Registro Exitoso"""
+        unique_id = str(uuid.uuid4())[:8]
+        participant_payload = {
+            "firstName": "Carlos",
+            "lastName": "Lopez",
+            "dni": f"10{self._generate_numeric_string(8)}",
+            "age": 25,
+            "program": "FUNCIONAL",
+            "type": "ESTUDIANTE",
+            "phone": "0999999999",
+            "email": f"carlos{unique_id}@test.com",
+            "address": "Av. Siempre Viva"
+        }
+
+        response_participant = requests.post(
+            f"{BASE_URL}/save-participants",
+            json=participant_payload,
+            headers=self._get_auth_headers()
+        )
+
+        self.assertIn(response_participant.status_code, [200, 201])
+
+        participant_external_id = response_participant.json()["data"]["participant_external_id"]
+
+        assessment_payload = {
+            "participant_external_id": participant_external_id,
+            "weight": 70,
+            "height": 1.75,
+            "waistPerimeter": 80,
+            "wingspan": 170,
+            "date": "2025-01-05"
+        }
+
+        response_assessment = requests.post(
+            f"{BASE_URL}/save-assessment",
+            json=assessment_payload,
+            headers=self._get_auth_headers()
+        )
+        if response_assessment.status_code != 200:
+            print("Error al registrar medidas (TC-03):", response_assessment.json())
+        else:
+            data = response_assessment.json()["data"]
+            print("Registro de Medidas Exitoso (TC-03):", data)
+
+    def test_tc_04_registro_medidas_altura_fuera_de_rango(self):
+        """TC-04: Registro de medidas antropométricas - Altura fuera de rango"""
+
+        unique_id = str(uuid.uuid4())[:8]
+        participant_payload = {
+            "firstName": "Luis",
+            "lastName": "Gomez",
+            "dni": f"12{self._generate_numeric_string(8)}",
+            "age": 28,
+            "program": "FUNCIONAL",
+            "type": "ESTUDIANTE",
+            "phone": "0997777777",
+            "email": f"luis{unique_id}@test.com",
+            "address": "Av Central"
+        }
+
+        response_participant = requests.post(
+            f"{BASE_URL}/save-participants",
+            json=participant_payload,
+            headers=self._get_auth_headers()
+        )
+
+        self.assertIn(response_participant.status_code, [200, 201])
+
+        participant_external_id = response_participant.json()["data"]["participant_external_id"]
+
+        # Altura completamente inválida
+        assessment_payload = {
+            "participant_external_id": participant_external_id,
+            "weight": 70,
+            "height": 3000,  #Valor irreal
+            "waistPerimeter": 80,
+            "wingspan": 170,
+            "date": "2025-01-05"
+        }
+
+        response_assessment = requests.post(
+            f"{BASE_URL}/save-assessment",
+            json=assessment_payload,
+            headers=self._get_auth_headers()
+        )
+        if response_assessment.status_code != 200:
+            print("Error al registrar medidas (TC-04):", response_assessment.json())
+        else:
+            data = response_assessment.json()["data"]
+            print("Registro de Medidas Exitoso (TC-04):", data)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

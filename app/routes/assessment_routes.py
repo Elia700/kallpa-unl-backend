@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app.controllers.assessment_controller import AssessmentController
+from app.models.activityLog import ActivityLog
 
 assessment_bp = Blueprint("assessment", __name__)
 controller = AssessmentController()
@@ -15,15 +16,52 @@ def register_evaluation():
     data = request.json
     return response_handler(controller.register(data))
 
+
 @assessment_bp.route("/list-assessment", methods=["GET"])
 def list_evaluation():
     return response_handler(controller.get_assessment())
+
 
 @assessment_bp.route("/update-assessment/<string:external_id>", methods=["PUT"])
 def update_evaluation(external_id):
     data = request.json
     return response_handler(controller.update(external_id, data))
 
-@assessment_bp.route("/participants/<string:participant_external_id>/assessments", methods=["GET"])
+
+@assessment_bp.route(
+    "/participants/<string:participant_external_id>/assessments", methods=["GET"]
+)
 def search_evaluation(participant_external_id):
-    return response_handler(controller.get_participants_external_id(participant_external_id))
+    return response_handler(
+        controller.get_participants_external_id(participant_external_id)
+    )
+
+
+@assessment_bp.route("/bmi-distribution", methods=["GET"])
+def bmi_distribution():
+    return response_handler(controller.get_bmi_distribution())
+
+@assessment_bp.route("/activities/recent", methods=["GET"])
+def recent_activities():
+    activities = (
+        ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(5).all()
+    )
+
+    return (
+        jsonify(
+            {
+                "status": "ok",
+                "data": [
+                    {
+                        "id": a.id,
+                        "type": a.type,
+                        "title": a.title,
+                        "description": a.description,
+                        "created_at": a.created_at.isoformat(),
+                    }
+                    for a in activities
+                ],
+            }
+        ),
+        200,
+    )

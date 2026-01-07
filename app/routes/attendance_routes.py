@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app.controllers.attendance_controller import AttendanceController
+from app.utils.jwt_required import jwt_required
 
 attendance_bp = Blueprint("attendance", __name__)
 controller = AttendanceController()
@@ -13,6 +14,7 @@ def response_handler(result):
 # ========== ATTENDANCE MANAGEMENT ==========
 
 @attendance_bp.route("/attendance", methods=["POST"])
+@jwt_required
 def register_attendance():
     """Registrar una asistencia individual"""
     data = request.json
@@ -21,6 +23,7 @@ def register_attendance():
 
 
 @attendance_bp.route("/attendance/bulk", methods=["POST"])
+@jwt_required
 def register_bulk_attendance():
     """Registrar múltiples asistencias de una sesión"""
     data = request.json
@@ -29,6 +32,7 @@ def register_bulk_attendance():
 
 
 @attendance_bp.route("/attendance", methods=["GET"])
+@jwt_required
 def list_attendances():
     """Obtener todas las asistencias con filtros opcionales"""
     filters = {
@@ -43,6 +47,7 @@ def list_attendances():
 
 
 @attendance_bp.route("/attendance/<external_id>", methods=["GET"])
+@jwt_required
 def get_attendance(external_id):
     """Obtener una asistencia específica por su external_id"""
     result = controller.get_attendance_by_id(external_id)
@@ -50,6 +55,7 @@ def get_attendance(external_id):
 
 
 @attendance_bp.route("/attendance/<external_id>", methods=["PUT"])
+@jwt_required
 def update_attendance(external_id):
     """Actualizar una asistencia existente"""
     data = request.json
@@ -58,6 +64,7 @@ def update_attendance(external_id):
 
 
 @attendance_bp.route("/attendance/<external_id>", methods=["DELETE"])
+@jwt_required
 def delete_attendance(external_id):
     """Eliminar una asistencia"""
     result = controller.delete_attendance(external_id)
@@ -65,6 +72,7 @@ def delete_attendance(external_id):
 
 
 @attendance_bp.route("/attendance/summary/<participant_external_id>", methods=["GET"])
+@jwt_required
 def get_summary(participant_external_id):
     """Obtener resumen de asistencias de un participante"""
     result = controller.get_participant_summary(participant_external_id)
@@ -89,6 +97,7 @@ def get_schedules():
 
 
 @attendance_bp.route("/attendance/v2/public/schedules", methods=["POST"])
+@jwt_required
 def create_schedule():
     """Crear un nuevo horario/sesión"""
     data = request.json
@@ -237,10 +246,3 @@ def delete_session_attendance_legacy(schedule_id, date):
     """Eliminar registro de asistencia de una fecha (ruta legacy)"""
     result = controller.delete_session_attendance(schedule_id, date)
     return response_handler(result)
-
-
-@attendance_bp.route("/attendance/today/average", methods=["GET"])
-def get_today_attendance_average():
-    """Obtener el promedio de asistencia de todos los participantes en el día actual."""
-    average = controller.get_today_attendance_average()
-    return response_handler(average)

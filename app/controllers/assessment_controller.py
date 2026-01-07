@@ -5,6 +5,7 @@ from app.utils.responses import error_response, success_response
 from app import db
 from sqlalchemy import func
 
+
 class AssessmentController:
     def classify_bmi_adult(self, bmi):
         if bmi < 18.5:
@@ -15,11 +16,11 @@ class AssessmentController:
             return "Sobrepeso"
         else:
             return "Obesidad"
-    
+
     def calculateBMI(self, weight, height):
         if height <= 0 or weight <= 0:
             return None
-        return round(weight / (height ** 2), 2)
+        return round(weight / (height**2), 2)
 
     def get_assessment(self):
         try:
@@ -54,28 +55,72 @@ class AssessmentController:
     def register(self, data):
         try:
             errors = {}
-
-            # Campos principales
+            # 1. Obtener campos
             participant_external_id = data.get("participant_external_id")
             weight = data.get("weight")
             height = data.get("height")
             date = data.get("date")
+            waistPerimeter = data.get("waistPerimeter")
+            wingspan = data.get("wingspan")
 
-            # Si los tres campos principales están vacíos, error general
-            if not participant_external_id and not weight and not height:
-                errors["general"] = "Campos requeridos: participante, peso y altura"
-
-            # Validación individual (opcional)
-            if not participant_external_id:
+            # 2. Validar existencia (obligatorios)
+            if participant_external_id is None:
                 errors["participant_external_id"] = "Campo requerido"
-            if not weight:
+
+            if weight is None:
                 errors["weight"] = "Campo requerido"
-            if not height:
+
+            if height is None:
                 errors["height"] = "Campo requerido"
-            if not date:
+
+            if date is None:
                 errors["date"] = "Campo requerido"
 
-            # Retornar errores si existen
+            # 3. Validar tipos (letras, strings, etc.)
+            if weight is not None and not isinstance(weight, (int, float)):
+                errors["weight"] = "El peso debe ser numérico"
+
+            if height is not None and not isinstance(height, (int, float)):
+                errors["height"] = "La altura debe ser numérica"
+
+            if waistPerimeter is not None and not isinstance(
+                waistPerimeter, (int, float)
+            ):
+                errors["waistPerimeter"] = "Debe ser numérico"
+
+            if wingspan is not None and not isinstance(wingspan, (int, float)):
+                errors["wingspan"] = "Debe ser numérico"
+
+            # 4. Validar rangos antropométricos
+            # =========================
+            if isinstance(weight, (int, float)):
+                if weight <= 0:
+                    errors["weight"] = "El peso debe ser mayor a 0"
+                elif weight < 0.5 or weight > 500:
+                    errors["weight"] = "El peso debe estar entre 0.5 y 500 kg"
+
+            # Altura (incluye recién nacidos)
+            if isinstance(height, (int, float)):
+                if height <= 0:
+                    errors["height"] = "La altura debe ser mayor a 0"
+                elif height < 0.3 or height > 2.5:
+                    errors["height"] = "La altura debe estar entre 0.3 y 2.5 metros"
+
+            # Perímetro de cintura (opcional)
+            if isinstance(waistPerimeter, (int, float)):
+                if waistPerimeter <= 0:
+                    errors["waistPerimeter"] = "Debe ser mayor a 0"
+                elif waistPerimeter < 0.4 or waistPerimeter > 2.0:
+                    errors["waistPerimeter"] = "Debe estar entre 0.4 y 2.0 metros"
+
+            # Envergadura (opcional)
+            if isinstance(wingspan, (int, float)):
+                if wingspan <= 0:
+                    errors["wingspan"] = "Debe ser mayor a 0"
+                elif wingspan < 0.3 or wingspan > 2.5:
+                    errors["wingspan"] = "Debe estar entre 0.3 y 2.5 metros"
+
+            # 5. Retornar errores si existen
             if errors:
                 return {
                     "code": 400,
@@ -85,10 +130,11 @@ class AssessmentController:
                     "data": None,
                 }
 
-            # Buscar participante
+            # 6. Buscar participante
             participant = Participant.query.filter_by(
                 external_id=participant_external_id
             ).first()
+
             if not participant:
                 return {
                     "code": 400,
@@ -98,28 +144,13 @@ class AssessmentController:
                     "data": None,
                 }
 
-            waistPerimeter = data.get("waistPerimeter")
-            wingspan = data.get("wingspan")
-
-            # Validación de altura
-            if height <= 0 or height < 0.8 or height > 2.5:
-                errors["height"] = "La altura debe estar entre 0.8 y 2.5 metros"
-            
-            if errors:
-                return {
-                    "code": 400,
-                    "status": "error",
-                    "msg": "Error de validación",
-                    "errors": errors,
-                    "data": None,
-                }
-            # Calcular IMC para todos
+            # 7. Calcular IMC
             bmi = self.calculateBMI(weight, height)
-            
-            # Asignar status según IMC (sin considerar edad)
+
+            # Clasificación solo para adultos (opcional)
             status = self.classify_bmi_adult(bmi)
 
-            # Crear evaluación
+            # 8. Crear evaluación
             assessment = Assessment(
                 participant_id=participant.id,
                 date=date,
@@ -134,11 +165,13 @@ class AssessmentController:
             db.session.add(assessment)
 
             log_activity(
-                type="MEDICIOOON",
+                type="MEDICION",
                 title="Medición registrada",
                 description=f"Se registró una evaluación para {participant.firstName} {participant.lastName}",
             )
+
             db.session.commit()
+
             return {
                 "code": 200,
                 "status": "ok",
@@ -237,7 +270,7 @@ class AssessmentController:
 
         except Exception as e:
             return error_response(msg=str(e), code=500)
-    
+
     def get_bmi_distribution(self):
         try:
             results = (
@@ -267,5 +300,3 @@ class AssessmentController:
 
         except Exception as e:
             return {"code": 500, "status": "error", "msg": str(e), "data": None}
-
-        

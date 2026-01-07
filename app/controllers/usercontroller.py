@@ -14,6 +14,41 @@ class UserController:
         auth_header = request.headers.get("Authorization", "")
         return auth_header
 
+    def _is_sequential(self, number_str):
+        """
+        Verifica si un número es secuencial (ej: 1234567890, 0987654321).
+        Retorna True si es secuencial, False si es válido.
+        """
+        # Patrones secuenciales comunes
+        sequential_patterns = [
+            "1234567890",
+            "0987654321",
+            "0123456789",
+            "9876543210",
+            "1111111111",
+            "2222222222",
+            "3333333333",
+            "4444444444",
+            "5555555555",
+            "6666666666",
+            "7777777777",
+            "8888888888",
+            "9999999999",
+        ]
+        
+        if number_str in sequential_patterns:
+            return True
+        
+        # Verificar si todos los dígitos son iguales
+        if len(set(number_str)) == 1:
+            return True
+        
+        # Verificar secuencia ascendente o descendente
+        is_ascending = all(int(number_str[i]) == int(number_str[i-1]) + 1 for i in range(1, len(number_str)))
+        is_descending = all(int(number_str[i]) == int(number_str[i-1]) - 1 for i in range(1, len(number_str)))
+        
+        return is_ascending or is_descending
+
     def get_users(self):
         try:
             participants = Participant.query.all()
@@ -38,6 +73,8 @@ class UserController:
             return error_response("Error interno del servidor", code=500)
 
     def create_user(self, data):
+        import re
+        
         try:
             # ---------- Validación general ----------
             if not data or not isinstance(data, dict):
@@ -62,37 +99,83 @@ class UserController:
                 return error_response(
                     "Campo requerido",
                     code=400,
-                    data=missing_fields,  # <-- Aquí devuelves el campo con el mensaje
+                    data=missing_fields,
                 )
+
+            errors = {}
 
             # ---------- Validar DNI ----------
             dni = str(data["dni"]).strip()
-            if not dni.isdigit() or len(dni) != 10:
-                return error_response(
-                    "Cédula inválida. Debe tener exactamente 10 dígitos",
-                    400,
-                    data={"dni": "Cédula inválida"},
-                )
+            if not dni.isdigit():
+                errors["dni"] = "DNI debe contener solo números"
+            elif len(dni) != 10:
+                errors["dni"] = "DNI debe tener exactamente 10 dígitos"
+            elif dni == "0000000000":
+                errors["dni"] = "DNI no puede ser solo ceros"
+            elif self._is_sequential(dni):
+                errors["dni"] = "DNI no puede ser un número secuencial"
+            elif User.query.filter_by(dni=dni).first():
+                errors["dni"] = "El DNI ya está registrado"
+
+            # ---------- Validar Email ----------
+            email = str(data["email"]).strip().lower()
+            email_pattern = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+            if not re.match(email_pattern, email):
+                errors["email"] = "Formato de correo electrónico inválido"
+            elif len(email) > 100:
+                errors["email"] = "Email no puede tener más de 100 caracteres"
+            elif User.query.filter_by(email=email).first():
+                errors["email"] = "El correo ya está registrado"
+
+            # ---------- Validar Nombres ----------
+            name_pattern = r'^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+$'
+            firstName = str(data["firstName"]).strip()
+            if len(firstName) < 2:
+                errors["firstName"] = "Nombre debe tener al menos 2 caracteres"
+            elif len(firstName) > 50:
+                errors["firstName"] = "Nombre no puede tener más de 50 caracteres"
+            elif not re.match(name_pattern, firstName):
+                errors["firstName"] = "Nombre solo puede contener letras (sin espacios)"
+
+            lastName = str(data["lastName"]).strip()
+            if len(lastName) < 2:
+                errors["lastName"] = "Apellido debe tener al menos 2 caracteres"
+            elif len(lastName) > 50:
+                errors["lastName"] = "Apellido no puede tener más de 50 caracteres"
+            elif not re.match(name_pattern, lastName):
+                errors["lastName"] = "Apellido solo puede contener letras (sin espacios)"
+
+            # ---------- Validar Password ----------
+            password = str(data["password"])
+            if len(password) < 6:
+                errors["password"] = "Contraseña debe tener al menos 6 caracteres"
+            elif len(password) > 50:
+                errors["password"] = "Contraseña no puede tener más de 50 caracteres"
 
             # ---------- Validar rol ----------
             allowed_roles = ["DOCENTE", "PASANTE", "ADMINISTRADOR"]
             if data["role"] not in allowed_roles:
-                return error_response(
-                    "Rol inválido", 400, data={"role": "Rol inválido"}
-                )
+                errors["role"] = f"Rol inválido. Use: {allowed_roles}"
 
-            # ---------- Validar duplicados ----------
-            if User.query.filter_by(dni=dni).first():
-                return error_response(
-                    "El DNI ya está registrado", 400, data={"dni": "DNI duplicado"}
-                )
+            # ---------- Validar teléfono (opcional) ----------
+            phone = data.get("phone")
+            if phone:
+                phone_str = str(phone).strip()
+                if phone_str and phone_str != "NINGUNA":
+                    if not phone_str.isdigit():
+                        errors["phone"] = "Teléfono debe contener solo números"
+                    elif len(phone_str) != 10:
+                        errors["phone"] = "Teléfono debe tener exactamente 10 dígitos"
+                    elif phone_str == "0000000000":
+                        errors["phone"] = "Teléfono no puede ser solo ceros"
+                    elif phone_str[0] != "0":
+                        errors["phone"] = "Teléfono debe iniciar con 0"
+                    elif self._is_sequential(phone_str):
+                        errors["phone"] = "Teléfono no puede ser un número secuencial"
 
-            if User.query.filter_by(email=data["email"].lower().strip()).first():
-                return error_response(
-                    "El correo ya está registrado",
-                    400,
-                    data={"email": "Correo duplicado"},
-                )
+            # Si hay errores, retornarlos
+            if errors:
+                return error_response("Errores de validación", code=400, data=errors)
 
             # ---------- Hashear contraseña ----------
             hashed_password = generate_password_hash(
@@ -107,12 +190,12 @@ class UserController:
 
             # ---------- Crear usuario ----------
             user = User(
-                firstName=data["firstName"].strip(),
-                lastName=data["lastName"].strip(),
+                firstName=firstName,
+                lastName=lastName,
                 dni=dni,
                 phone=phone,
                 address=address,
-                email=data["email"].lower().strip(),
+                email=email,
                 password=hashed_password,
                 role=data["role"],
                 status="ACTIVO",
@@ -222,10 +305,22 @@ class UserController:
         token = self._get_token()
 
         try:
-            is_minor = data.get("type") == "INICIACION" or data.get("age", 0) < 18
-
-            participant_data = data.get("participant") if is_minor else data
-            responsible_data = data.get("responsible") if is_minor else None
+            # Determinar si es menor basado en type o age
+            # Si viene "participant" como clave, usar esa estructura
+            # Si no, usar data directamente
+            has_participant_key = "participant" in data and data.get("participant") is not None
+            
+            if has_participant_key:
+                participant_data = data.get("participant")
+                responsible_data = data.get("responsible")
+                age = participant_data.get("age", 0) if participant_data else 0
+            else:
+                participant_data = data
+                responsible_data = data.get("responsible")
+                age = data.get("age", 0)
+            
+            # Es menor si tiene menos de 18 años
+            is_minor = age < 18
 
             # 1. Validaciones
             validation_result = self._validate_participant(
@@ -279,6 +374,8 @@ class UserController:
             return error_response(str(e), 500)
 
     def _validate_participant(self, participant, responsible, is_minor):
+        import re
+        
         errors = {}
         required_fields = [
             "firstName",
@@ -294,17 +391,124 @@ class UserController:
             if not participant.get(field):
                 errors[field] = "Campo requerido"
 
+        # ========== VALIDACIÓN DE DNI ==========
         dni = participant.get("dni")
         if dni:
-            dni_str = str(dni)
-            if len(dni_str) < 9 or len(dni_str) > 10:
-                errors["dni"] = "DNI inválido (debe tener entre 9 y 10 dígitos)"
+            dni_str = str(dni).strip()
+            # Debe ser exactamente 10 dígitos numéricos
+            if not dni_str.isdigit():
+                errors["dni"] = "DNI debe contener solo números"
+            elif len(dni_str) != 10:
+                errors["dni"] = "DNI debe tener exactamente 10 dígitos"
+            elif dni_str == "0000000000":
+                errors["dni"] = "DNI no puede ser solo ceros"
+            elif self._is_sequential(dni_str):
+                errors["dni"] = "DNI no puede ser un número secuencial"
             elif Participant.query.filter_by(dni=dni).first():
                 errors["dni"] = "El DNI ya está registrado"
-        email = participant.get("email")
-        if email and Participant.query.filter_by(email=email).first():
-            errors["email"] = "El correo ya está registrado"
 
+        # ========== VALIDACIÓN DE TELÉFONO ==========
+        phone = participant.get("phone")
+        if phone:
+            phone_str = str(phone).strip()
+            if not phone_str.isdigit():
+                errors["phone"] = "Teléfono debe contener solo números (sin letras ni caracteres especiales)"
+            elif len(phone_str) != 10:
+                errors["phone"] = "Teléfono debe tener exactamente 10 dígitos"
+            elif phone_str == "0000000000":
+                errors["phone"] = "Teléfono no puede ser solo ceros"
+            elif phone_str[0] != "0":
+                errors["phone"] = "Teléfono debe iniciar con 0"
+            elif self._is_sequential(phone_str):
+                errors["phone"] = "Teléfono no puede ser un número secuencial"
+
+        # ========== VALIDACIÓN DE EMAIL ==========
+        email = participant.get("email")
+        if email:
+            email_str = str(email).strip()
+            email_pattern = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+            if not re.match(email_pattern, email_str):
+                errors["email"] = "Formato de correo electrónico inválido"
+            elif len(email_str) > 100:
+                errors["email"] = "Email no puede tener más de 100 caracteres"
+            elif Participant.query.filter_by(email=email).first():
+                errors["email"] = "El correo ya está registrado"
+
+        # ========== VALIDACIÓN DE EDAD (1-80 años) ==========
+        age = participant.get("age")
+        if age is not None:
+            try:
+                age_int = int(age)
+                if age_int < 1:
+                    errors["age"] = "Edad debe ser mayor a 0"
+                elif age_int > 80:
+                    errors["age"] = "Edad máxima permitida es 80 años"
+            except (ValueError, TypeError):
+                errors["age"] = "Edad debe ser un número válido"
+
+        # ========== VALIDACIÓN DE PROGRAMA SEGÚN EDAD ==========
+        # Reglas:
+        # - Menores de 16 años: solo INICIACIÓN
+        # - 16-17 años: puede FUNCIONAL o INICIACIÓN
+        # - 18+ años: solo FUNCIONAL
+        program = participant.get("program")
+        if age is not None and program:
+            try:
+                age_int = int(age)
+                if age_int < 16 and program == "FUNCIONAL":
+                    errors["program"] = "Menores de 16 años solo pueden inscribirse a INICIACIÓN"
+                elif age_int >= 18 and program == "INICIACION":
+                    errors["program"] = "Mayores de 18 años solo pueden inscribirse a FUNCIONAL"
+            except (ValueError, TypeError):
+                pass  # Ya se validó arriba
+
+        # ========== VALIDACIÓN DE NOMBRES (sin caracteres especiales ni espacios) ==========
+        firstName = participant.get("firstName")
+        if firstName:
+            firstName_str = str(firstName).strip()
+            # Solo letras y acentos permitidos (sin espacios)
+            name_pattern = r'^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+$'
+            if len(firstName_str) < 2:
+                errors["firstName"] = "Nombre debe tener al menos 2 caracteres"
+            elif len(firstName_str) > 50:
+                errors["firstName"] = "Nombre no puede tener más de 50 caracteres"
+            elif not re.match(name_pattern, firstName_str):
+                errors["firstName"] = "Nombre solo puede contener letras (sin espacios) y no puede contener caracteres no permitidos"
+        
+        lastName = participant.get("lastName")
+        if lastName:
+            lastName_str = str(lastName).strip()
+            name_pattern = r'^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+$'
+            if len(lastName_str) < 2:
+                errors["lastName"] = "Apellido debe tener al menos 2 caracteres"
+            elif len(lastName_str) > 50:
+                errors["lastName"] = "Apellido no puede tener más de 50 caracteres"
+            elif not re.match(name_pattern, lastName_str):
+                errors["lastName"] = "Apellido solo puede contener letras (sin espacios) y no puede contener caracteres no permitidos"
+
+        # ========== VALIDACIÓN DE DIRECCIÓN ==========
+        address = participant.get("address")
+        if address:
+            address_str = str(address).strip()
+            if len(address_str) > 200:
+                errors["address"] = "Dirección no puede tener más de 200 caracteres"
+            # No caracteres peligrosos para SQL injection o XSS
+            dangerous_pattern = r'[<>"\';{}]'
+            if re.search(dangerous_pattern, address_str):
+                errors["address"] = "Dirección contiene caracteres no permitidos"
+
+        # ========== VALIDACIÓN DE TYPE ==========
+        valid_types = ["ESTUDIANTE", "EXTERNO", "DOCENTE", "PASANTE"]
+        type_val = participant.get("type")
+        if type_val and type_val not in valid_types:
+            errors["type"] = f"Tipo inválido. Use: {valid_types}"
+
+        # ========== VALIDACIÓN DE PROGRAMA ==========
+        valid_programs = ["INICIACION", "FUNCIONAL"]
+        if program and program not in valid_programs:
+            errors["program"] = f"Programa inválido. Use: {valid_programs}"
+
+        # ========== VALIDACIÓN DE RESPONSABLE (MENORES de 18) ==========
         if is_minor:
             if not responsible:
                 errors["responsibleName"] = "Campo requerido"
@@ -317,17 +521,50 @@ class UserController:
                     if not responsible.get(field):
                         errors[key] = "Campo requerido"
 
+                # Validar nombre del responsable
+                resp_name = responsible.get("name")
+                if resp_name:
+                    name_pattern = r'^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+$'
+                    if len(resp_name.strip()) < 2:
+                        errors["responsibleName"] = "Nombre debe tener al menos 2 caracteres"
+                    elif not re.match(name_pattern, resp_name.strip()):
+                        errors["responsibleName"] = "Nombre solo puede contener letras (sin espacios)"
+
+                # Validar DNI del responsable
                 responsible_dni = responsible.get("dni")
                 if responsible_dni:
-                    dni_str = str(responsible_dni)
-                    if len(dni_str) < 9 or len(dni_str) > 10:
-                        errors["responsibleDni"] = (
-                            "DNI inválido (debe tener entre 9 y 10 dígitos)"
-                        )
+                    dni_str = str(responsible_dni).strip()
+                    if not dni_str.isdigit():
+                        errors["responsibleDni"] = "DNI debe contener solo números"
+                    elif len(dni_str) != 10:
+                        errors["responsibleDni"] = "DNI debe tener exactamente 10 dígitos"
+                    elif dni_str == "0000000000":
+                        errors["responsibleDni"] = "DNI no puede ser solo ceros"
+                    elif self._is_sequential(dni_str):
+                        errors["responsibleDni"] = "DNI no puede ser un número secuencial"
                     elif Responsible.query.filter_by(dni=responsible_dni).first():
-                        errors["responsibleDni"] = (
-                            "El DNI del responsable ya está registrado"
-                        )
+                        errors["responsibleDni"] = "El DNI del responsable ya está registrado"
+
+                # Validar teléfono del responsable
+                responsible_phone = responsible.get("phone")
+                if responsible_phone:
+                    phone_str = str(responsible_phone).strip()
+                    if not phone_str.isdigit():
+                        errors["responsiblePhone"] = "Teléfono debe contener solo números"
+                    elif len(phone_str) != 10:
+                        errors["responsiblePhone"] = "Teléfono debe tener exactamente 10 dígitos"
+                    elif phone_str == "0000000000":
+                        errors["responsiblePhone"] = "Teléfono no puede ser solo ceros"
+                    elif phone_str[0] != "0":
+                        errors["responsiblePhone"] = "Teléfono debe iniciar con 0"
+                    elif self._is_sequential(phone_str):
+                        errors["responsiblePhone"] = "Teléfono no puede ser un número secuencial"
+
+                # Validar que DNI del responsable sea diferente al del participante
+                participant_dni = participant.get("dni")
+                if responsible_dni and participant_dni:
+                    if str(responsible_dni).strip() == str(participant_dni).strip():
+                        errors["responsibleDni"] = "El DNI del responsable no puede ser igual al del participante"
 
         if errors:
             return error_response("Errores de validación", data=errors)

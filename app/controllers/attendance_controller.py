@@ -15,17 +15,29 @@ class AttendanceController:
             campos = ["participant_external_id", "schedule_external_id", "status"]
             for campo in campos:
                 if campo not in data:
-                    return error_response(f"Falta el campo requerido: {campo}")
+                    return error_response(
+                        msg="Error de validación",
+                        code=400,
+                        data={campo: f"El campo {campo} es requerido"}
+                    )
 
             valid_statuses = [Attendance.Status.PRESENT, Attendance.Status.ABSENT]
             if data["status"] not in valid_statuses:
-                return error_response(f"Estado inválido. Use: {valid_statuses}")
+                return error_response(
+                    msg="Error de validación",
+                    code=400,
+                    data={"status": f"Estado inválido. Use: {valid_statuses}"}
+                )
 
             participant = Participant.query.filter_by(
                 external_id=data["participant_external_id"]
             ).first()
             if not participant:
-                return error_response("Participante no encontrado", code=404)
+                return error_response(
+                    msg="Participante no encontrado",
+                    code=404,
+                    data={"participant_external_id": data.get("participant_external_id")}
+                )
 
             schedule = Schedule.query.filter_by(
                 external_id=data["schedule_external_id"]
@@ -37,7 +49,11 @@ class AttendanceController:
             try:
                 datetime.strptime(fecha, "%Y-%m-%d")
             except ValueError:
-                return error_response("Formato de fecha inválido. Use YYYY-MM-DD")
+                return error_response(
+                    msg="Error de validación",
+                    code=400,
+                    data={"date": "Formato de fecha inválido. Use YYYY-MM-DD"}
+                )
 
             # Check duplicates
             existing_attendance = Attendance.query.filter_by(
@@ -46,7 +62,16 @@ class AttendanceController:
                 date=fecha
             ).first()
             if existing_attendance:
-                 return error_response(f"El participante ya tiene asistencia registrada para esta fecha y horario")
+                 return error_response(
+                     msg="Error de validación",
+                     code=400,
+                     data={
+                         "participant_external_id": data.get("participant_external_id"),
+                         "schedule_external_id": data.get("schedule_external_id"),
+                         "date": fecha,
+                         "error": "El participante ya tiene asistencia registrada para esta fecha y horario"
+                     }
+                 )
 
             # Check capacity
             current_count = Attendance.query.filter_by(
@@ -56,7 +81,16 @@ class AttendanceController:
             ).count()
             
             if current_count >= schedule.maxSlots:
-                return error_response(f"Cupos llenos para esta sesión ({schedule.maxSlots} slots)")
+                return error_response(
+                    msg="Error de validación",
+                    code=400,
+                    data={
+                        "schedule_external_id": data.get("schedule_external_id"),
+                        "max_slots": schedule.maxSlots,
+                        "current_count": current_count,
+                        "error": f"Cupos llenos para esta sesión ({schedule.maxSlots} slots)"
+                    }
+                )
 
             nuevo = Attendance(
                 participant_id=participant.id,
@@ -79,24 +113,38 @@ class AttendanceController:
             )
         except Exception as e:
             db.session.rollback()
-            return error_response(f"Error interno: {str(e)}")
+            return error_response(
+                msg="Error interno",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def register_bulk_attendance(self, data):
         """Registrar múltiples asistencias de una sesión"""
         try:
             if "schedule_external_id" not in data:
-                return error_response("Falta el campo: schedule_external_id")
+                return error_response(
+                    msg="Error de validación",
+                    code=400,
+                    data={"schedule_external_id": "El campo schedule_external_id es requerido"}
+                )
 
             if "attendances" not in data or not isinstance(data["attendances"], list):
                 return error_response(
-                    "Falta el campo: attendances (debe ser una lista)"
+                    msg="Error de validación",
+                    code=400,
+                    data={"attendances": "El campo attendances es requerido y debe ser una lista"}
                 )
 
             schedule = Schedule.query.filter_by(
                 external_id=data["schedule_external_id"]
             ).first()
             if not schedule:
-                return error_response("Horario no encontrado", code=404)
+                return error_response(
+                    msg="Horario no encontrado",
+                    code=404,
+                    data={"schedule_external_id": data.get("schedule_external_id")}
+                )
 
             fecha = data.get("date", date.today().isoformat())
             registros_creados = []
@@ -144,7 +192,11 @@ class AttendanceController:
             )
         except Exception as e:
             db.session.rollback()
-            return error_response(f"Error interno: {str(e)}")
+            return error_response(
+                msg="Error interno",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def get_attendances(self, filters=None):
         """Obtener todas las asistencias con filtros opcionales"""
@@ -186,7 +238,11 @@ class AttendanceController:
                 msg="Asistencias obtenidas correctamente", data=result
             )
         except Exception as e:
-            return error_response(f"Error interno: {str(e)}")
+            return error_response(
+                msg="Error interno",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def get_attendance_by_id(self, external_id):
         """Obtener una asistencia específica por su external_id"""
@@ -207,7 +263,11 @@ class AttendanceController:
                 },
             )
         except Exception as e:
-            return error_response(f"Error interno: {str(e)}")
+            return error_response(
+                msg="Error interno",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def update_attendance(self, external_id, data):
         """Actualizar una asistencia existente"""
@@ -215,14 +275,22 @@ class AttendanceController:
             attendance = Attendance.query.filter_by(external_id=external_id).first()
 
             if not attendance:
-                return error_response("Asistencia no encontrada", code=404)
+                return error_response(
+                    msg="Asistencia no encontrada",
+                    code=404,
+                    data={"external_id": external_id}
+                )
 
             if "status" in data:
                 if data["status"] not in [
                     Attendance.Status.PRESENT,
                     Attendance.Status.ABSENT,
                 ]:
-                    return error_response("Estado inválido. Use: present, absent")
+                    return error_response(
+                        msg="Error de validación",
+                        code=400,
+                        data={"status": "Estado inválido. Use: present, absent"}
+                    )
                 attendance.status = data["status"]
 
             db.session.commit()
@@ -239,7 +307,11 @@ class AttendanceController:
             )
         except Exception as e:
             db.session.rollback()
-            return error_response(f"Error interno: {str(e)}")
+            return error_response(
+                msg="Error interno",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def delete_attendance(self, external_id):
         """Eliminar una asistencia"""
@@ -247,7 +319,11 @@ class AttendanceController:
             attendance = Attendance.query.filter_by(external_id=external_id).first()
 
             if not attendance:
-                return error_response("Asistencia no encontrada", code=404)
+                return error_response(
+                    msg="Asistencia no encontrada",
+                    code=404,
+                    data={"external_id": external_id}
+                )
 
             data = {
                 "external_id": attendance.external_id,
@@ -263,7 +339,11 @@ class AttendanceController:
             return success_response(msg="Asistencia eliminada correctamente", data=data)
         except Exception as e:
             db.session.rollback()
-            return error_response(f"Error interno: {str(e)}")
+            return error_response(
+                msg="Error interno",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def get_participant_summary(self, participant_external_id):
         """Obtener resumen de asistencias de un participante"""
@@ -272,7 +352,11 @@ class AttendanceController:
                 external_id=participant_external_id
             ).first()
             if not participant:
-                return error_response("Participante no encontrado", code=404)
+                return error_response(
+                    msg="Participante no encontrado",
+                    code=404,
+                    data={"participant_external_id": participant_external_id}
+                )
 
             attendances = Attendance.query.filter_by(
                 participant_id=participant.id
@@ -298,7 +382,11 @@ class AttendanceController:
                 },
             )
         except Exception as e:
-            return error_response(f"Error interno: {str(e)}")
+            return error_response(
+                msg="Error interno",
+                code=500,
+                data={"error": str(e)}
+            )
 
     # ========== MÉTODOS PÚBLICOS PARA EL FRONTEND ==========
 
@@ -331,7 +419,11 @@ class AttendanceController:
                 msg="Participantes obtenidos correctamente", data=result
             )
         except Exception as e:
-            return error_response(f"Error interno: {str(e)}")
+            return error_response(
+                msg="Error interno",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def get_schedules(self):
         """Obtener todos los horarios"""
@@ -358,7 +450,11 @@ class AttendanceController:
                 )
             return success_response(msg="Horarios obtenidos correctamente", data=result)
         except Exception as e:
-            return error_response(f"Error interno: {str(e)}")
+            return error_response(
+                msg="Error interno",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def create_schedule(self, data):
         """Crear un nuevo horario/sesión"""
@@ -380,45 +476,85 @@ class AttendanceController:
             description = data.get("description")
 
             if not all([name, start_time, end_time, max_slots, program]):
-                return error_response(f"Faltan campos requeridos")
+                return error_response(
+                    msg="Error de validación",
+                    code=400,
+                    data={"error": "Faltan campos requeridos: name, start_time, end_time, max_slots, program"}
+                )
             
             # Validar que tenga dayOfWeek O specificDate (al menos uno)
             if not day_of_week and not specific_date:
-                return error_response("Se requiere dayOfWeek o specificDate")
+                return error_response(
+                    msg="Error de validación",
+                    code=400,
+                    data={"error": "Se requiere dayOfWeek o specificDate"}
+                )
 
             valid_programs = ["INICIACION", "FUNCIONAL"]
             if program not in valid_programs:
-                return error_response(f"Programa inválido. Use: {valid_programs}")
+                return error_response(
+                    msg="Error de validación",
+                    code=400,
+                    data={"program": f"Programa inválido. Use: {valid_programs}"}
+                )
             
             # Validar fechas no sean pasadas
             from datetime import date as date_class
             hoy = date_class.today().isoformat()
             
             if specific_date and specific_date < hoy:
-                return error_response("No se puede crear sesión con fecha pasada")
+                return error_response(
+                    msg="Error de validación",
+                    code=400,
+                    data={"specific_date": "No se puede crear sesión con fecha pasada"}
+                )
             
             if start_date and start_date < hoy:
-                return error_response("La fecha de inicio no puede ser anterior a hoy")
+                return error_response(
+                    msg="Error de validación",
+                    code=400,
+                    data={"start_date": "La fecha de inicio no puede ser anterior a hoy"}
+                )
             
             if end_date and start_date and end_date < start_date:
-                return error_response("La fecha de fin debe ser posterior a la fecha de inicio")
+                return error_response(
+                    msg="Error de validación",
+                    code=400,
+                    data={"end_date": "La fecha de fin debe ser posterior a la fecha de inicio"}
+                )
 
             valid_days = [
                 "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"
             ]
             if day_of_week.upper() not in valid_days:
-                return error_response(f"Día inválido. Use: {valid_days}")
+                return error_response(
+                    msg="Error de validación",
+                    code=400,
+                    data={"day_of_week": f"Día inválido. Use: {valid_days}"}
+                )
 
             import re
             time_pattern = r'^([01]\d|2[0-3]):([0-5]\d)$'
             if not re.match(time_pattern, start_time) or not re.match(time_pattern, end_time):
-               return error_response("Formato de hora inválido. Use HH:MM (24h)")
+               return error_response(
+                   msg="Error de validación",
+                   code=400,
+                   data={"time": "Formato de hora inválido. Use HH:MM (24h)"}
+               )
             
             if start_time >= end_time:
-                return error_response("La hora de inicio debe ser menor a la hora de fin")
+                return error_response(
+                    msg="Error de validación",
+                    code=400,
+                    data={"time": "La hora de inicio debe ser menor a la hora de fin"}
+                )
 
             if int(max_slots) <= 0:
-                return error_response("El número de cupos debe ser mayor a 0")
+                return error_response(
+                    msg="Error de validación",
+                    code=400,
+                    data={"max_slots": "El número de cupos debe ser mayor a 0"}
+                )
 
             # Validate Overlaps
             overlaps = Schedule.query.filter(
@@ -431,7 +567,14 @@ class AttendanceController:
             ).first()
             
             if overlaps:
-                return error_response(f"El horario se solapa con otro existente: {overlaps.name}")
+                return error_response(
+                    msg="Error de validación",
+                    code=400,
+                    data={
+                        "schedule": f"El horario se solapa con otro existente: {overlaps.name}",
+                        "existing_schedule": overlaps.name
+                    }
+                )
 
             nuevo_schedule = Schedule(
                 name=name,
@@ -459,7 +602,11 @@ class AttendanceController:
             )
         except Exception as e:
             db.session.rollback()
-            return error_response(f"Error creando horario: {str(e)}")
+            return error_response(
+                msg="Error creando horario",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def update_schedule(self, schedule_id, data):
         """Actualizar un horario"""
@@ -497,20 +644,32 @@ class AttendanceController:
             )
         except Exception as e:
             db.session.rollback()
-            return error_response(f"Error actualizando horario: {str(e)}")
+            return error_response(
+                msg="Error actualizando horario",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def delete_schedule(self, schedule_id):
         """Eliminar un horario"""
         try:
             schedule = Schedule.query.filter_by(external_id=schedule_id).first()
             if not schedule:
-                return error_response("Horario no encontrado", code=404)
+                return error_response(
+                    msg="Horario no encontrado",
+                    code=404,
+                    data={"schedule_external_id": schedule_id}
+                )
             schedule.status = "inactive"
             db.session.commit()
             return success_response(msg="Horario eliminado correctamente (Soft Delete)")
         except Exception as e:
             db.session.rollback()
-            return error_response(f"Error eliminando horario: {str(e)}")
+            return error_response(
+                msg="Error eliminando horario",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def get_today_sessions(self):
         """Obtener las sesiones programadas para hoy"""
@@ -561,7 +720,11 @@ class AttendanceController:
                 msg=f"Sesiones de hoy obtenidas correctamente", data=result
             )
         except Exception as e:
-            return error_response(f"Error interno: {str(e)}")
+            return error_response(
+                msg="Error interno",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def get_history(
         self, date_from=None, date_to=None, schedule_id=None, day_filter=None
@@ -609,7 +772,11 @@ class AttendanceController:
                 )
             return success_response(msg="Historial obtenido correctamente", data=result)
         except Exception as e:
-            return error_response(f"Error interno: {str(e)}")
+            return error_response(
+                msg="Error interno",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def register_public_attendance(self, data):
         """Registrar asistencia desde el frontend"""
@@ -622,7 +789,11 @@ class AttendanceController:
             result = [{"name": p[0]} for p in programs if p[0]]
             return success_response(msg="Programas obtenidos", data=result)
         except Exception as e:
-            return error_response(f"Error obteniendo programas: {str(e)}")
+            return error_response(
+                msg="Error obteniendo programas",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def get_session_detail(self, schedule_id, date):
         """Obtener detalle de asistencia de una sesión"""
@@ -656,14 +827,22 @@ class AttendanceController:
 
             return success_response(msg="Detalle de sesión obtenido", data=result)
         except Exception as e:
-            return error_response(f"Error: {str(e)}")
+            return error_response(
+                msg="Error",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def delete_session_attendance(self, schedule_id, date):
         """Eliminar asistencia de una sesión"""
         try:
             schedule = Schedule.query.filter_by(external_id=schedule_id).first()
             if not schedule:
-                return error_response("Horario no encontrado", code=404)
+                return error_response(
+                    msg="Horario no encontrado",
+                    code=404,
+                    data={"schedule_external_id": schedule_id}
+                )
 
             Attendance.query.filter_by(schedule_id=schedule.id, date=date).delete()
             db.session.commit()
@@ -673,7 +852,11 @@ class AttendanceController:
             )
         except Exception as e:
             db.session.rollback()
-            return error_response(f"Error: {str(e)}")
+            return error_response(
+                msg="Error",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def _calculate_attendance_percentage(self, participant_id):
         """Calcula el porcentaje de asistencia de un participante"""
@@ -692,18 +875,28 @@ class AttendanceController:
         """Registrar múltiples asistencias de una sesión"""
         try:
             if "schedule_external_id" not in data:
-                return error_response("Falta el campo: schedule_external_id")
+                return error_response(
+                    msg="Error de validación",
+                    code=400,
+                    data={"schedule_external_id": "El campo schedule_external_id es requerido"}
+                )
 
             if "attendances" not in data or not isinstance(data["attendances"], list):
                 return error_response(
-                    "Falta el campo: attendances (debe ser una lista)"
+                    msg="Error de validación",
+                    code=400,
+                    data={"attendances": "El campo attendances es requerido y debe ser una lista"}
                 )
 
             schedule = Schedule.query.filter_by(
                 external_id=data["schedule_external_id"]
             ).first()
             if not schedule:
-                return error_response("Horario no encontrado", code=404)
+                return error_response(
+                    msg="Horario no encontrado",
+                    code=404,
+                    data={"schedule_external_id": data.get("schedule_external_id")}
+                )
 
             fecha = data.get("date", date.today().isoformat())
             registros_creados = []
@@ -751,7 +944,11 @@ class AttendanceController:
             )
         except Exception as e:
             db.session.rollback()
-            return error_response(f"Error interno: {str(e)}")
+            return error_response(
+                msg="Error interno",
+                code=500,
+                data={"error": str(e)}
+            )
 
     def get_daily_attendance_percentage(self, date_str=None):
         """Obtener la sesión con el porcentaje de asistencia más bajo del último día o fecha especificada"""
@@ -807,4 +1004,8 @@ class AttendanceController:
             )
 
         except Exception as e:
-            return error_response(f"Error interno: {str(e)}")
+            return error_response(
+                msg="Error interno",
+                code=500,
+                data={"error": str(e)}
+            )

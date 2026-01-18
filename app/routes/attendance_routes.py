@@ -97,7 +97,7 @@ def get_schedules():
 
 
 @attendance_bp.route("/attendance/v2/public/schedules", methods=["POST"])
-@jwt_required
+# @jwt_required  # Endpoint público - no requiere autenticación
 def create_schedule():
     """Crear un nuevo horario/sesión"""
     data = request.json

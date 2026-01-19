@@ -643,6 +643,25 @@ class UserController:
         Obtiene el perfil completo de un usuario por su external_id.
         """
         try:
+            # Validar si es cuenta admin/mock (admin@kallpa.com o dev@kallpa.com)
+            if external_id == "usuario-mock-bypass":
+                return success_response(
+                    msg="Perfil de administrador del sistema",
+                    data={
+                        "external_id": "usuario-mock-bypass",
+                        "email": "sistema@kallpa.com",
+                        "firstName": "Administrador",
+                        "lastName": "Sistema",
+                        "dni": "N/A",
+                        "phone": "N/A",
+                        "address": "N/A",
+                        "role": "ADMINISTRADOR",
+                        "status": "ACTIVO",
+                        "is_system_admin": True,
+                        "nota": "Esta cuenta es especial del sistema (admin@kallpa.com o dev@kallpa.com) y no puede ser editada",
+                    },
+                )
+
             db.session.expire_all()
             user = User.query.filter_by(external_id=external_id).first()
             if not user:
@@ -660,6 +679,7 @@ class UserController:
                     "address": user.address,
                     "role": user.role,
                     "status": user.status,
+                    "is_system_admin": False,
                 },
             )
         except Exception as e:
@@ -676,6 +696,14 @@ class UserController:
         import requests
 
         try:
+            # Validar si es cuenta admin/mock - no se puede modificar
+            if external_id == "usuario-mock-bypass":
+                return error_response(
+                    "La cuenta de administrador del sistema no puede ser modificada. "
+                    "Esta es una cuenta especial sin datos editables.",
+                    403
+                )
+
             print(f"[UserService] Buscando usuario con external_id: {external_id}")
 
             user = User.query.filter_by(external_id=external_id).first()

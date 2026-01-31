@@ -302,6 +302,10 @@ class UserController:
         return error_response(msg="Participante no encontrado en Java", code=404)
 
     def create_participant(self, data):
+        """
+        Crea un nuevo participante y opcionalmente su responsable si es menor de edad.
+        Realiza validaciones, verifica duplicados en Java y asegura la consistencia de datos.
+        """
         token = self._get_token()
 
         try:
@@ -341,39 +345,51 @@ class UserController:
             # 3. Crear participante
             participant = self._build_participant(participant_data, is_minor, program)
             db.session.add(participant)
-
-            # # 4. Sincronizar Java
-            # self._sync_with_java(participant, participant_data, token, is_minor)
-
-            # db.session.add(participant)
-            # db.session.flush()
-
-            # 5. Responsable (solo iniciación)
-            responsible = None
-            if is_minor:
-                responsible = self._create_responsible(responsible_data, participant)
-
             db.session.commit()
+            
+            # Recargar participante para asegurar ID consistente
+            # Esto soluciona el problema de responsables huérfanos
+            p_fresh = Participant.query.filter_by(external_id=participant.external_id).first()
+            
             try:
-                self._sync_with_java(participant, participant_data, token, is_minor)
-            except Exception as e:
-                print(f"[Warning] Error sincronizando con Java: {e}")
+                # 5. Responsable (solo iniciación/menores)
+                responsible = None
+                if is_minor and p_fresh:
+                    responsible = self._create_responsible(responsible_data, p_fresh.id)
+                
+                if responsible:
+                    db.session.commit()
+                
+                try:
+                    self._sync_with_java(participant, participant_data, token, is_minor)
+                except Exception as e:
+                    print(f"[Warning] Error sincronizando con Java: {e}")
 
-            return success_response(
-                msg="Participante registrado correctamente",
-                data={
-                    "participant_external_id": participant.external_id,
-                    "responsible_external_id": (
-                        responsible.external_id if responsible else None
-                    ),
-                },
-            )
+                return success_response(
+                    msg="Participante registrado correctamente",
+                    data={
+                        "participant_external_id": participant.external_id,
+                        "responsible_external_id": (
+                            responsible.external_id if responsible else None
+                        ),
+                    },
+                )
+
+            except Exception as e:
+                # Si falla algo después de crear el participante, lo borramos para no dejar basura
+                db.session.delete(p_fresh)
+                db.session.commit()
+                return error_response(f"Error creando responsable: {str(e)}", 500)
 
         except Exception as e:
             db.session.rollback()
             return error_response(str(e), 500)
 
     def _validate_participant(self, participant, responsible, is_minor):
+        """
+        Valida los datos del participante y del responsable.
+        Retorna un error_response si hay errores, o None si todo es válido.
+        """
         import re
         
         errors = {}
@@ -498,10 +514,14 @@ class UserController:
                 errors["address"] = "Dirección contiene caracteres no permitidos"
 
         # ========== VALIDACIÓN DE TYPE ==========
-        valid_types = ["ESTUDIANTE", "EXTERNO", "DOCENTE", "PASANTE"]
+        valid_types = ["ESTUDIANTE", "EXTERNO", "DOCENTE"]
         type_val = participant.get("type")
         if type_val and type_val not in valid_types:
             errors["type"] = f"Tipo inválido. Use: {valid_types}"
+        
+        # Validar que menores no sean DOCENTE
+        if is_minor and type_val == "DOCENTE":
+            errors["type"] = "Menores de edad no pueden ser DOCENTE"
 
         # ========== VALIDACIÓN DE PROGRAMA ==========
         valid_programs = ["INICIACION", "FUNCIONAL"]
@@ -572,6 +592,9 @@ class UserController:
         return None
 
     def _build_participant(self, data, is_minor, program=None):
+        """
+        Construye una instancia de Participant con los datos validados.
+        """
         return Participant(
             firstName=data.get("firstName"),
             lastName=data.get("lastName"),
@@ -581,16 +604,19 @@ class UserController:
             email=data.get("email") or None,
             address=data.get("address"),
             status="ACTIVO",
-            type="INICIACION" if is_minor else data.get("type", "EXTERNO"),
+            type=data.get("type", "EXTERNO"),
             program=program,
         )
 
-    def _create_responsible(self, data, participant):
+    def _create_responsible(self, data, participant_id):
+        """
+        Crea una instancia de Responsible vinculada al participante por su ID.
+        """
         responsible = Responsible(
             name=data.get("name"),
             dni=data.get("dni"),
             phone=data.get("phone"),
-            participant_id=participant.id,
+            participant_id=participant_id,
         )
         db.session.add(responsible)
         return responsible
@@ -852,6 +878,49 @@ class UserController:
         except Exception as e:
             return error_response("Error interno del servidor", code=500)
 
+    def get_participant_by_id(self, external_id):
+        """
+        Obtiene un participante por su external_id con su responsable (si tiene).
+        """
+        try:
+            participant = Participant.query.filter_by(external_id=external_id).first()
+            if not participant:
+                return error_response("Participante no encontrado", 404)
+
+            # Obtener el responsable si existe
+            responsible_data = None
+            if participant.responsibles:
+                resp = participant.responsibles[0]
+                responsible_data = {
+                    "external_id": resp.external_id,
+                    "name": resp.name,
+                    "dni": resp.dni,
+                    "phone": resp.phone,
+                }
+
+            return success_response(
+                msg="Participante obtenido correctamente",
+                data={
+                    "external_id": participant.external_id,
+                    "firstName": participant.firstName,
+                    "lastName": participant.lastName,
+                    "age": participant.age,
+                    "dni": participant.dni,
+                    "phone": participant.phone,
+                    "email": participant.email,
+                    "address": participant.address,
+                    "status": participant.status,
+                    "type": participant.type,
+                    "program": participant.program,
+                    "java_external": participant.java_external,
+                    "responsible": responsible_data,
+                },
+            )
+
+        except Exception as e:
+            print(f"[UserController] Error obteniendo participante: {str(e)}")
+            return error_response(f"Error interno del servidor: {str(e)}", 500)
+
     def update_participant(self, external_id, data):
         """
         Actualiza los datos básicos de un participante.
@@ -966,7 +1035,7 @@ class UserController:
 
             # ========== VALIDAR TYPE ==========
             if "type" in data:
-                valid_types = ["ESTUDIANTE", "EXTERNO", "DOCENTE", "PASANTE"]
+                valid_types = ["ESTUDIANTE", "EXTERNO", "DOCENTE"]
                 type_val = str(data["type"]).strip().upper()
                 if type_val not in valid_types:
                     errors["type"] = f"Tipo inválido. Use: {valid_types}"

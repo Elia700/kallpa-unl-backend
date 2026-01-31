@@ -100,6 +100,12 @@ def update_user_profile():
         print(f"[ERROR] update_user_profile: {str(e)}")
         return jsonify({"status": "error", "msg": f"Error: {str(e)}", "code": 500}), 500
 
+@user_bp.route("/participants/<string:external_id>", methods=["GET"])
+def get_participant(external_id):
+    """Obtiene un participante por su external_id con su responsable (si tiene)"""
+    return response_handler(controller.get_participant_by_id(external_id))
+
+
 @user_bp.route("/participants/<string:external_id>", methods=["PUT"])
 def update_participant(external_id):
     """Actualiza la información básica de un participante"""

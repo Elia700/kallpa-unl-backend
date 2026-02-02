@@ -302,6 +302,10 @@ class UserController:
         return error_response(msg="Participante no encontrado en Java", code=404)
 
     def create_participant(self, data):
+        """
+        Crea un nuevo participante y opcionalmente su responsable si es menor de edad.
+        Realiza validaciones, verifica duplicados en Java y asegura la consistencia de datos.
+        """
         token = self._get_token()
 
         try:
@@ -341,39 +345,48 @@ class UserController:
             # 3. Crear participante
             participant = self._build_participant(participant_data, is_minor, program)
             db.session.add(participant)
-
-            # # 4. Sincronizar Java
-            # self._sync_with_java(participant, participant_data, token, is_minor)
-
-            # db.session.add(participant)
-            # db.session.flush()
-
-            # 5. Responsable (solo iniciación)
-            responsible = None
-            if is_minor:
-                responsible = self._create_responsible(responsible_data, participant)
-
             db.session.commit()
+            
+            p_fresh = Participant.query.filter_by(external_id=participant.external_id).first()
+            
             try:
-                self._sync_with_java(participant, participant_data, token, is_minor)
-            except Exception as e:
-                print(f"[Warning] Error sincronizando con Java: {e}")
+                # 5. Responsable (solo iniciación/menores)
+                responsible = None
+                if is_minor and p_fresh:
+                    responsible = self._create_responsible(responsible_data, p_fresh.id)
+                
+                if responsible:
+                    db.session.commit()
+                
+                try:
+                    self._sync_with_java(participant, participant_data, token, is_minor)
+                except Exception as e:
+                    print(f"[Warning] Error sincronizando con Java: {e}")
 
-            return success_response(
-                msg="Participante registrado correctamente",
-                data={
-                    "participant_external_id": participant.external_id,
-                    "responsible_external_id": (
-                        responsible.external_id if responsible else None
-                    ),
-                },
-            )
+                return success_response(
+                    msg="Participante registrado correctamente",
+                    data={
+                        "participant_external_id": participant.external_id,
+                        "responsible_external_id": (
+                            responsible.external_id if responsible else None
+                        ),
+                    },
+                )
+
+            except Exception as e:
+                db.session.delete(p_fresh)
+                db.session.commit()
+                return error_response(f"Error creando responsable: {str(e)}", 500)
 
         except Exception as e:
             db.session.rollback()
             return error_response(str(e), 500)
 
     def _validate_participant(self, participant, responsible, is_minor):
+        """
+        Valida los datos del participante y del responsable.
+        Retorna un error_response si hay errores, o None si todo es válido.
+        """
         import re
         
         errors = {}
@@ -498,10 +511,14 @@ class UserController:
                 errors["address"] = "Dirección contiene caracteres no permitidos"
 
         # ========== VALIDACIÓN DE TYPE ==========
-        valid_types = ["ESTUDIANTE", "EXTERNO", "DOCENTE", "PASANTE"]
+        valid_types = ["ESTUDIANTE", "EXTERNO", "DOCENTE"]
         type_val = participant.get("type")
         if type_val and type_val not in valid_types:
             errors["type"] = f"Tipo inválido. Use: {valid_types}"
+        
+        # Validar que menores no sean DOCENTE
+        if is_minor and type_val == "DOCENTE":
+            errors["type"] = "Menores de edad no pueden ser DOCENTE"
 
         # ========== VALIDACIÓN DE PROGRAMA ==========
         valid_programs = ["INICIACION", "FUNCIONAL"]
@@ -572,6 +589,9 @@ class UserController:
         return None
 
     def _build_participant(self, data, is_minor, program=None):
+        """
+        Construye una instancia de Participant con los datos validados.
+        """
         return Participant(
             firstName=data.get("firstName"),
             lastName=data.get("lastName"),
@@ -581,16 +601,19 @@ class UserController:
             email=data.get("email") or None,
             address=data.get("address"),
             status="ACTIVO",
-            type="INICIACION" if is_minor else data.get("type", "EXTERNO"),
+            type=data.get("type", "EXTERNO"),
             program=program,
         )
 
-    def _create_responsible(self, data, participant):
+    def _create_responsible(self, data, participant_id):
+        """
+        Crea una instancia de Responsible vinculada al participante por su ID.
+        """
         responsible = Responsible(
             name=data.get("name"),
             dni=data.get("dni"),
             phone=data.get("phone"),
-            participant_id=participant.id,
+            participant_id=participant_id,
         )
         db.session.add(responsible)
         return responsible
@@ -852,10 +875,56 @@ class UserController:
         except Exception as e:
             return error_response("Error interno del servidor", code=500)
 
+    def get_participant_by_id(self, external_id):
+        """
+        Obtiene un participante por su external_id con su responsable (si tiene).
+        """
+        try:
+            participant = Participant.query.filter_by(external_id=external_id).first()
+            if not participant:
+                return error_response("Participante no encontrado", 404)
+
+            # Obtener el responsable si existe
+            responsible_data = None
+            if participant.responsibles:
+                resp = participant.responsibles[0]
+                responsible_data = {
+                    "external_id": resp.external_id,
+                    "name": resp.name,
+                    "dni": resp.dni,
+                    "phone": resp.phone,
+                }
+
+            return success_response(
+                msg="Participante obtenido correctamente",
+                data={
+                    "external_id": participant.external_id,
+                    "firstName": participant.firstName,
+                    "lastName": participant.lastName,
+                    "age": participant.age,
+                    "dni": participant.dni,
+                    "phone": participant.phone,
+                    "email": participant.email,
+                    "address": participant.address,
+                    "status": participant.status,
+                    "type": participant.type,
+                    "program": participant.program,
+                    "java_external": participant.java_external,
+                    "responsible": responsible_data,
+                },
+            )
+
+        except Exception as e:
+            print(f"[UserController] Error obteniendo participante: {str(e)}")
+            return error_response(f"Error interno del servidor: {str(e)}", 500)
+
     def update_participant(self, external_id, data):
         """
         Actualiza los datos básicos de un participante.
-        Campos editables: firstName, lastName, phone, email, address, age, dni
+        Campos editables del participante: firstName, lastName, phone, email, address, age, dni, type, program
+        
+        Si el participante tiene un responsable asociado (menores de edad), también se pueden
+        editar sus datos enviando un objeto "responsible" con los campos: name, dni, phone
         """
         import re
 
@@ -961,11 +1030,95 @@ class UserController:
                     if existing:
                         errors["dni"] = "El DNI ya está registrado"
 
+            # ========== VALIDAR TYPE ==========
+            if "type" in data:
+                valid_types = ["ESTUDIANTE", "EXTERNO", "DOCENTE"]
+                type_val = str(data["type"]).strip().upper()
+                if type_val not in valid_types:
+                    errors["type"] = f"Tipo inválido. Use: {valid_types}"
+
+            # ========== VALIDAR PROGRAM ==========
+            if "program" in data:
+                valid_programs = ["INICIACION", "FUNCIONAL"]
+                program_val = str(data["program"]).strip().upper()
+                if program_val not in valid_programs:
+                    errors["program"] = f"Programa inválido. Use: {valid_programs}"
+                else:
+                    # Validar restricciones por edad
+                    # Usar la edad del data si viene, sino la del participante actual
+                    check_age = int(data["age"]) if "age" in data else participant.age
+                    if check_age < 16 and program_val == "FUNCIONAL":
+                        errors["program"] = "Menores de 16 años solo pueden inscribirse a INICIACION"
+                    elif check_age >= 18 and program_val == "INICIACION":
+                        errors["program"] = "Mayores de 18 años solo pueden inscribirse a FUNCIONAL"
+
+            # ========== VALIDAR RESPONSABLE (si viene en data) ==========
+            responsible_data = data.get("responsible")
+            responsible = None
+            
+            # Obtener el responsable del participante (si existe)
+            if participant.responsibles:
+                responsible = participant.responsibles[0]  # El primero asociado
+            
+            if responsible_data:
+                if not responsible:
+                    errors["responsible"] = "Este participante no tiene un responsable asociado"
+                else:
+                    # Validar nombre del responsable
+                    if "name" in responsible_data:
+                        resp_name = str(responsible_data["name"]).strip()
+                        name_pattern = r'^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ ]+$'
+                        if len(resp_name) < 2:
+                            errors["responsibleName"] = "Nombre debe tener al menos 2 caracteres"
+                        elif len(resp_name) > 100:
+                            errors["responsibleName"] = "Nombre no puede tener más de 100 caracteres"
+                        elif not re.match(name_pattern, resp_name):
+                            errors["responsibleName"] = "Nombre solo puede contener letras"
+                    
+                    # Validar DNI del responsable
+                    if "dni" in responsible_data:
+                        resp_dni_str = str(responsible_data["dni"]).strip()
+                        if not resp_dni_str.isdigit():
+                            errors["responsibleDni"] = "DNI debe contener solo números"
+                        elif len(resp_dni_str) != 10:
+                            errors["responsibleDni"] = "DNI debe tener exactamente 10 dígitos"
+                        elif resp_dni_str == "0000000000":
+                            errors["responsibleDni"] = "DNI no puede ser solo ceros"
+                        elif self._is_sequential(resp_dni_str):
+                            errors["responsibleDni"] = "DNI no puede ser un número secuencial"
+                        else:
+                            # Verificar unicidad (excluyendo el responsable actual)
+                            existing_resp = Responsible.query.filter(
+                                Responsible.dni == resp_dni_str,
+                                Responsible.id != responsible.id
+                            ).first()
+                            if existing_resp:
+                                errors["responsibleDni"] = "El DNI del responsable ya está registrado"
+                            # Validar que no sea igual al DNI del participante
+                            participant_dni = data.get("dni", participant.dni)
+                            if resp_dni_str == str(participant_dni).strip():
+                                errors["responsibleDni"] = "El DNI del responsable no puede ser igual al del participante"
+                    
+                    # Validar teléfono del responsable
+                    if "phone" in responsible_data:
+                        resp_phone_str = str(responsible_data["phone"]).strip()
+                        if resp_phone_str:
+                            if not resp_phone_str.isdigit():
+                                errors["responsiblePhone"] = "Teléfono debe contener solo números"
+                            elif len(resp_phone_str) != 10:
+                                errors["responsiblePhone"] = "Teléfono debe tener exactamente 10 dígitos"
+                            elif resp_phone_str == "0000000000":
+                                errors["responsiblePhone"] = "Teléfono no puede ser solo ceros"
+                            elif resp_phone_str[0] != "0":
+                                errors["responsiblePhone"] = "Teléfono debe iniciar con 0"
+                            elif self._is_sequential(resp_phone_str):
+                                errors["responsiblePhone"] = "Teléfono no puede ser un número secuencial"
+
             # Si hay errores, retornarlos
             if errors:
                 return error_response("Errores de validación", code=400, data=errors)
 
-            # ========== ACTUALIZAR CAMPOS ==========
+            # ========== ACTUALIZAR CAMPOS DEL PARTICIPANTE ==========
             if "firstName" in data:
                 participant.firstName = str(data["firstName"]).strip()
             if "lastName" in data:
@@ -980,8 +1133,31 @@ class UserController:
                 participant.age = int(data["age"])
             if "dni" in data:
                 participant.dni = str(data["dni"]).strip()
+            if "type" in data:
+                participant.type = str(data["type"]).strip().upper()
+            if "program" in data:
+                participant.program = str(data["program"]).strip().upper()
+
+            # ========== ACTUALIZAR CAMPOS DEL RESPONSABLE ==========
+            if responsible_data and responsible:
+                if "name" in responsible_data:
+                    responsible.name = str(responsible_data["name"]).strip()
+                if "dni" in responsible_data:
+                    responsible.dni = str(responsible_data["dni"]).strip()
+                if "phone" in responsible_data:
+                    responsible.phone = str(responsible_data["phone"]).strip()
 
             db.session.commit()
+
+            # Preparar datos del responsable para la respuesta
+            responsible_response = None
+            if responsible:
+                responsible_response = {
+                    "external_id": responsible.external_id,
+                    "name": responsible.name,
+                    "dni": responsible.dni,
+                    "phone": responsible.phone,
+                }
 
             return success_response(
                 msg="Participante actualizado correctamente",
@@ -997,6 +1173,7 @@ class UserController:
                     "status": participant.status,
                     "type": participant.type,
                     "program": participant.program,
+                    "responsible": responsible_response,
                 },
             )
 

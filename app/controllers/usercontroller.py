@@ -133,10 +133,25 @@ class UserController:
             address = address if address else "NINGUNA"
 
             # ---------- Validaciones ----------
-            errors.update(validate_dni(dni, self._is_sequential))
+            # Permitir mismo DNI que un participante: esa persona puede ser también docente/pasante
+            errors.update(validate_dni(dni, self._is_sequential, check_participant=False))
             errors.update(validate_email(email))
-            errors.update(validate_name("firstName", first_name))
-            errors.update(validate_name("lastName", last_name))
+            errors.update(
+                validate_name(
+                    "firstName",
+                    first_name,
+                    min_msg="Nombre demasiado corto",
+                    max_msg="Nombre demasiado largo",
+                )
+            )
+            errors.update(
+                validate_name(
+                    "lastName",
+                    last_name,
+                    min_msg="Apellido demasiado corto",
+                    max_msg="Apellido demasiado largo",
+                )
+            )
             errors.update(validate_password(password))
             errors.update(validate_phone(phone, self._is_sequential))
 
@@ -174,29 +189,29 @@ class UserController:
             db.session.commit()
 
             # ---------- Sincronizar con Java ----------
-            java_synced = False
-            token = self._get_token()
+            # java_synced = False
+            # token = self._get_token()
 
-            if token:
-                java_data = {
-                    "firstName": user.firstName,
-                    "lastName": user.lastName,
-                    "dni": user.dni,
-                    "phone": user.phone,
-                    "address": user.address,
-                    "type": user.role,
-                    "email": user.email,
-                    "password": password,
-                }
+            # if token:
+            #     java_data = {
+            #         "firstName": user.firstName,
+            #         "lastName": user.lastName,
+            #         "dni": user.dni,
+            #         "phone": user.phone,
+            #         "address": user.address,
+            #         "type": user.role,
+            #         "email": user.email,
+            #         "password": password,
+            #     }
 
-                java_result = java_sync.create_person_with_account(java_data, token)
+            #     java_result = java_sync.create_person_with_account(java_data, token)
 
-                if java_result and java_result.get("success"):
-                    user.java_external = java_result.get("data", {}).get("external")
-                    db.session.commit()
-                    java_synced = True
-                else:
-                    print(f"No se pudo sincronizar con Java: {java_result}")
+            #     if java_result and java_result.get("success"):
+            #         user.java_external = java_result.get("data", {}).get("external")
+            #         db.session.commit()
+            #         java_synced = True
+            #     else:
+            #         print(f"No se pudo sincronizar con Java: {java_result}")
 
             # ---------- Respuesta final ----------
             return success_response(
@@ -204,7 +219,7 @@ class UserController:
                 data={
                     "external_id": user.external_id,
                     "role": user.role,
-                    "java_synced": java_synced,
+                    # "java_synced": java_synced,
                 },
                 code=200,
             )
@@ -310,27 +325,36 @@ class UserController:
                     f"Programa inválido. Use: {valid_programs}", code=400
                 )
 
-            self._check_java_duplicate(participant_data, token)
+            # self._check_java_duplicate(participant_data, token)
 
-            participant = self._build_participant(participant_data, is_minor, program)
+            # Si el DNI pertenece a un User (docente/pasante), vincular participante a ese usuario
+            dni_str = str(participant_data.get("dni", "")).strip()
+            existing_user = User.query.filter_by(dni=dni_str).first()
+            user_id = existing_user.id if existing_user else None
+
+            participant = self._build_participant(
+                participant_data, is_minor, program, user_id=user_id
+            )
             db.session.add(participant)
             db.session.commit()
-            
-            p_fresh = Participant.query.filter_by(external_id=participant.external_id).first()
-            
+
+            p_fresh = Participant.query.filter_by(
+                external_id=participant.external_id
+            ).first()
+
             try:
                 # 5. Responsable (solo iniciación/menores)
                 responsible = None
                 if is_minor and p_fresh:
                     responsible = self._create_responsible(responsible_data, p_fresh.id)
-                
+
                 if responsible:
                     db.session.commit()
-                
-                try:
-                    self._sync_with_java(participant, participant_data, token, is_minor)
-                except Exception as e:
-                    print(f"[Warning] Error sincronizando con Java: {e}")
+
+                # try:
+                #     self._sync_with_java(participant, participant_data, token, is_minor)
+                # except Exception as e:
+                #     print(f"[Warning] Error sincronizando con Java: {e}")
 
                 return success_response(
                     msg="Participante registrado correctamente",
@@ -359,6 +383,21 @@ class UserController:
         import re
 
         errors = {}
+        friendly_names = {
+            "firstName": "Nombre",
+            "lastName": "Apellido",
+            "dni": "DNI",
+            "age": "Edad",
+            "phone": "Teléfono",
+            "program": "Programa",
+            "email": "Correo electrónico",
+            "type": "Tipo",
+            # Responsable
+            "responsibleName": "Nombre del responsable",
+            "responsibleDni": "DNI del responsable",
+            "responsiblePhone": "Teléfono del responsable",
+        }
+
         required_fields = [
             "firstName",
             "lastName",
@@ -370,8 +409,9 @@ class UserController:
             "type",
         ]
         for field in required_fields:
-            if not participant.get(field):
-                errors[field] = "Campo requerido"
+            value = participant.get(field)
+            if value is None or (isinstance(value, str) and not value.strip()):
+                errors[field] = f"{friendly_names.get(field, field)} requerido"
 
         # ========== VALIDACIÓN DE DNI ==========
         dni = participant.get("dni")
@@ -386,8 +426,14 @@ class UserController:
                 errors["dni"] = "DNI no puede ser solo ceros"
             elif self._is_sequential(dni_str):
                 errors["dni"] = "DNI no puede ser un número secuencial"
-            elif Participant.query.filter_by(dni=dni).first():
-                errors["dni"] = "El DNI ya está registrado"
+            else:
+                # Permitir mismo DNI que un User (docente/pasante): esa persona puede ser también participante
+                if (
+                    Participant.query.filter_by(dni=dni_str).first()
+                    or Responsible.query.filter_by(dni=dni_str).first()
+                ):
+                    errors["dni"] = "El DNI ya está registrado"
+                # Si existe solo en User, no rechazar; en create_participant se vinculará con user_id
 
         # ========== VALIDACIÓN DE TELÉFONO ==========
         phone = participant.get("phone")
@@ -423,8 +469,8 @@ class UserController:
         if age is not None:
             try:
                 age_int = int(age)
-                if age_int < 1:
-                    errors["age"] = "Edad debe ser mayor a 0"
+                if age_int < 5:
+                    errors["age"] = "Edad mínima permitida es 5 años"
                 elif age_int > 80:
                     errors["age"] = "Edad máxima permitida es 80 años"
             except (ValueError, TypeError):
@@ -494,7 +540,7 @@ class UserController:
         type_val = participant.get("type")
         if type_val and type_val not in valid_types:
             errors["type"] = f"Tipo inválido. Use: {valid_types}"
-        
+
         # Validar que menores no sean DOCENTE
         if is_minor and type_val == "DOCENTE":
             errors["type"] = "Menores de edad no pueden ser DOCENTE"
@@ -506,16 +552,17 @@ class UserController:
 
         # ========== VALIDACIÓN DE RESPONSABLE (MENORES de 18) ==========
         if is_minor:
+            responsible_required = ["name", "dni", "phone"]
             if not responsible:
-                errors["responsibleName"] = "Campo requerido"
-                errors["responsibleDni"] = "Campo requerido"
-                errors["responsiblePhone"] = "Campo requerido"
-            else:
-                responsible_required = ["name", "dni", "phone"]
                 for field in responsible_required:
                     key = "responsible" + field.capitalize()
-                    if not responsible.get(field):
-                        errors[key] = "Campo requerido"
+                    errors[key] = f"{friendly_names.get(key, key)} requerido"
+            else:
+                for field in responsible_required:
+                    key = "responsible" + field.capitalize()
+                    value = responsible.get(field)
+                    if value is None or (isinstance(value, str) and not value.strip()):
+                        errors[key] = f"{friendly_names.get(key, key)} requerido"
 
                 # Validar nombre del responsable
                 resp_name = responsible.get("name")
@@ -544,10 +591,12 @@ class UserController:
                         errors["responsibleDni"] = (
                             "DNI no puede ser un número secuencial"
                         )
-                    elif Responsible.query.filter_by(dni=responsible_dni).first():
-                        errors["responsibleDni"] = (
-                            "El DNI del responsable ya está registrado"
-                        )
+                    else:
+                        if (
+                            Responsible.query.filter_by(dni=dni_str).first()
+                            or Participant.query.filter_by(dni=dni_str).first()
+                        ):
+                            errors["responsibleDni"] = "El DNI ya está registrado"
 
                 # Validar teléfono del responsable
                 responsible_phone = responsible.get("phone")
@@ -583,9 +632,10 @@ class UserController:
 
         return None
 
-    def _build_participant(self, data, is_minor, program=None):
+    def _build_participant(self, data, is_minor, program=None, user_id=None):
         """
         Construye una instancia de Participant con los datos validados.
+        user_id: opcional; si la persona es también User (docente/pasante), se vincula aquí.
         """
         return Participant(
             firstName=data.get("firstName"),
@@ -598,6 +648,7 @@ class UserController:
             status="ACTIVO",
             type=data.get("type", "EXTERNO"),
             program=program,
+            user_id=user_id,
         )
 
     def _create_responsible(self, data, participant_id):
@@ -917,7 +968,7 @@ class UserController:
         """
         Actualiza los datos básicos de un participante.
         Campos editables del participante: firstName, lastName, phone, email, address, age, dni, type, program
-        
+
         Si el participante tiene un responsable asociado (menores de edad), también se pueden
         editar sus datos enviando un objeto "responsible" con los campos: name, dni, phone
         """
@@ -1045,71 +1096,101 @@ class UserController:
                     # Usar la edad del data si viene, sino la del participante actual
                     check_age = int(data["age"]) if "age" in data else participant.age
                     if check_age < 16 and program_val == "FUNCIONAL":
-                        errors["program"] = "Menores de 16 años solo pueden inscribirse a INICIACION"
+                        errors["program"] = (
+                            "Menores de 16 años solo pueden inscribirse a INICIACION"
+                        )
                     elif check_age >= 18 and program_val == "INICIACION":
-                        errors["program"] = "Mayores de 18 años solo pueden inscribirse a FUNCIONAL"
+                        errors["program"] = (
+                            "Mayores de 18 años solo pueden inscribirse a FUNCIONAL"
+                        )
 
             # ========== VALIDAR RESPONSABLE (si viene en data) ==========
             responsible_data = data.get("responsible")
             responsible = None
-            
+
             # Obtener el responsable del participante (si existe)
             if participant.responsibles:
                 responsible = participant.responsibles[0]  # El primero asociado
-            
+
             if responsible_data:
                 if not responsible:
-                    errors["responsible"] = "Este participante no tiene un responsable asociado"
+                    errors["responsible"] = (
+                        "Este participante no tiene un responsable asociado"
+                    )
                 else:
                     # Validar nombre del responsable
                     if "name" in responsible_data:
                         resp_name = str(responsible_data["name"]).strip()
-                        name_pattern = r'^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ ]+$'
+                        name_pattern = r"^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ ]+$"
                         if len(resp_name) < 2:
-                            errors["responsibleName"] = "Nombre debe tener al menos 2 caracteres"
+                            errors["responsibleName"] = (
+                                "Nombre debe tener al menos 2 caracteres"
+                            )
                         elif len(resp_name) > 100:
-                            errors["responsibleName"] = "Nombre no puede tener más de 100 caracteres"
+                            errors["responsibleName"] = (
+                                "Nombre no puede tener más de 100 caracteres"
+                            )
                         elif not re.match(name_pattern, resp_name):
-                            errors["responsibleName"] = "Nombre solo puede contener letras"
-                    
+                            errors["responsibleName"] = (
+                                "Nombre solo puede contener letras"
+                            )
+
                     # Validar DNI del responsable
                     if "dni" in responsible_data:
                         resp_dni_str = str(responsible_data["dni"]).strip()
                         if not resp_dni_str.isdigit():
                             errors["responsibleDni"] = "DNI debe contener solo números"
                         elif len(resp_dni_str) != 10:
-                            errors["responsibleDni"] = "DNI debe tener exactamente 10 dígitos"
+                            errors["responsibleDni"] = (
+                                "DNI debe tener exactamente 10 dígitos"
+                            )
                         elif resp_dni_str == "0000000000":
                             errors["responsibleDni"] = "DNI no puede ser solo ceros"
                         elif self._is_sequential(resp_dni_str):
-                            errors["responsibleDni"] = "DNI no puede ser un número secuencial"
+                            errors["responsibleDni"] = (
+                                "DNI no puede ser un número secuencial"
+                            )
                         else:
                             # Verificar unicidad (excluyendo el responsable actual)
                             existing_resp = Responsible.query.filter(
                                 Responsible.dni == resp_dni_str,
-                                Responsible.id != responsible.id
+                                Responsible.id != responsible.id,
                             ).first()
                             if existing_resp:
-                                errors["responsibleDni"] = "El DNI del responsable ya está registrado"
+                                errors["responsibleDni"] = (
+                                    "El DNI del responsable ya está registrado"
+                                )
                             # Validar que no sea igual al DNI del participante
                             participant_dni = data.get("dni", participant.dni)
                             if resp_dni_str == str(participant_dni).strip():
-                                errors["responsibleDni"] = "El DNI del responsable no puede ser igual al del participante"
-                    
+                                errors["responsibleDni"] = (
+                                    "El DNI del responsable no puede ser igual al del participante"
+                                )
+
                     # Validar teléfono del responsable
                     if "phone" in responsible_data:
                         resp_phone_str = str(responsible_data["phone"]).strip()
                         if resp_phone_str:
                             if not resp_phone_str.isdigit():
-                                errors["responsiblePhone"] = "Teléfono debe contener solo números"
+                                errors["responsiblePhone"] = (
+                                    "Teléfono debe contener solo números"
+                                )
                             elif len(resp_phone_str) != 10:
-                                errors["responsiblePhone"] = "Teléfono debe tener exactamente 10 dígitos"
+                                errors["responsiblePhone"] = (
+                                    "Teléfono debe tener exactamente 10 dígitos"
+                                )
                             elif resp_phone_str == "0000000000":
-                                errors["responsiblePhone"] = "Teléfono no puede ser solo ceros"
+                                errors["responsiblePhone"] = (
+                                    "Teléfono no puede ser solo ceros"
+                                )
                             elif resp_phone_str[0] != "0":
-                                errors["responsiblePhone"] = "Teléfono debe iniciar con 0"
+                                errors["responsiblePhone"] = (
+                                    "Teléfono debe iniciar con 0"
+                                )
                             elif self._is_sequential(resp_phone_str):
-                                errors["responsiblePhone"] = "Teléfono no puede ser un número secuencial"
+                                errors["responsiblePhone"] = (
+                                    "Teléfono no puede ser un número secuencial"
+                                )
 
             # Si hay errores, retornarlos
             if errors:

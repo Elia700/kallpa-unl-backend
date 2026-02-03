@@ -1,4 +1,6 @@
 import re
+from app.models.participant import Participant
+from app.models.responsible import Responsible
 from app.models.user import User
 from app.utils.constants.message import (
     DNI_EXISTS,
@@ -26,14 +28,32 @@ ALLOWED_ROLES = ["DOCENTE", "PASANTE", "ADMINISTRADOR"]
 
 
 def validate_required_fields(data, required_fields):
+    field_names = {
+        "firstName": "Nombre",
+        "lastName": "Apellido",
+        "dni": "DNI",
+        "phone": "Teléfono",
+        "email": "Correo electrónico",
+        "password": "Contraseña",
+        "role": "Rol",
+        "address": "Dirección"
+    }
     errors = {}
     for field in required_fields:
-        if field not in data or not str(data[field]).strip():
-            errors[field] = REQUIRED_FIELD
+        value = data.get(field)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            friendly_name = field_names.get(field, field)
+            errors[field] = f"{friendly_name} requerido"
     return errors
 
 
-def validate_dni(dni, is_sequential):
+def validate_dni(dni, is_sequential, check_participant=True):
+    """
+    Valida formato y unicidad del DNI.
+    - check_participant=True (default): DNI no debe existir en User, Participant ni Responsible.
+    - check_participant=False: solo rechaza si existe en User o Responsible.
+      Usado en create_user para permitir que un participante sea también docente/pasante (mismo DNI).
+    """
     errors = {}
     if not dni.isdigit():
         errors["dni"] = DNI_ONLY_NUMBERS
@@ -43,8 +63,12 @@ def validate_dni(dni, is_sequential):
         errors["dni"] = DNI_ZEROS
     elif is_sequential(dni):
         errors["dni"] = DNI_SEQUENTIAL
-    elif User.query.filter_by(dni=dni).first():
-        errors["dni"] = DNI_EXISTS
+    else:
+        exists_user = User.query.filter_by(dni=dni).first()
+        exists_responsible = Responsible.query.filter_by(dni=dni).first()
+        exists_participant = Participant.query.filter_by(dni=dni).first() if check_participant else None
+        if exists_user or exists_responsible or exists_participant:
+            errors["dni"] = DNI_EXISTS
     return errors
 
 

@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app.controllers.assessment_controller import AssessmentController
 from app.models.activityLog import ActivityLog
-from app.utils import jwt_required
+from app.utils.jwt_required import jwt_required
 
 assessment_bp = Blueprint("assessment", __name__)
 controller = AssessmentController()
@@ -39,30 +39,4 @@ def update_evaluation(external_id):
 def search_evaluation(participant_external_id):
     return response_handler(
         controller.get_participants_external_id(participant_external_id)
-    )
-
-@assessment_bp.route("/activities/recent", methods=["GET"])
-@jwt_required
-def recent_activities():
-    activities = (
-        ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(5).all()
-    )
-
-    return (
-        jsonify(
-            {
-                "status": "ok",
-                "data": [
-                    {
-                        "id": a.id,
-                        "type": a.type,
-                        "title": a.title,
-                        "description": a.description,
-                        "created_at": a.created_at.isoformat(),
-                    }
-                    for a in activities
-                ],
-            }
-        ),
-        200,
     )

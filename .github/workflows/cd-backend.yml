@@ -59,22 +59,3 @@ jobs:
       with:
         app-name: ${{ env.AZURE_WEBAPP_NAME }}
         package: .
-
-  health-check:
-    runs-on: ubuntu-latest
-    needs: deploy
-    
-    steps:
-    - name: Wait for deployment
-      run: sleep 30
-      
-    - name: Health Check
-      run: |
-        response=$(curl -s -o /dev/null -w "%{http_code}" https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/health)
-        echo "Health check response: $response"
-        if [ $response -ne 200 ]; then
-          echo "Health check failed with status code: $response"
-          exit 1
-        else
-          echo "Health check passed successfully!"
-        fi

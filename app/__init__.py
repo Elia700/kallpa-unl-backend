@@ -9,7 +9,19 @@ def create_app():
     app = Flask(__name__, instance_relative_config=False)
     app.config.from_object(Config)
     db.init_app(app)
-    CORS(app, origins=["http://localhost:3000", "http://localhost:4200", "http://localhost:3001", "http://localhost:8080"], supports_credentials=True)
+    CORS(
+        app, 
+        resources={r"/*": {"origins": [
+            "https://kallpa-frontend-app-fqcgcebxc5f5a6gg.westus3-01.azurewebsites.net",
+            "http://localhost:3000", 
+            "http://localhost:4200", 
+            "http://localhost:3001", 
+            "http://localhost:8080"
+        ]}},
+        supports_credentials=True,
+        allow_headers=["Content-Type", "Authorization"],
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    )
     
     with app.app_context():
         from app import models

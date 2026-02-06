@@ -39,14 +39,6 @@ def create_app():
         from app.routes.evaluation_routes import evaluation_bp
         app.register_blueprint(evaluation_bp, url_prefix='/api')
         
-    @app.after_request
-    def after_request(response):
-        response.headers.add("Access-Control-Allow-Origin", "https://kallpa-frontend-app-fqcgcebxc5f5a6gg.westus3-01.azurewebsites.net")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
-        response.headers.add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-        response.headers.add("Access-Control-Allow-Credentials", "true")
-        return response
-        
     @app.teardown_appcontext
     def shutdown_session(exception=None):
         db.session.remove()

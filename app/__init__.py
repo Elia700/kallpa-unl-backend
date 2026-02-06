@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from app.config.config import Config
 from flask_cors import CORS 
@@ -22,6 +22,11 @@ def create_app():
         allow_headers=["Content-Type", "Authorization"],
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     )
+
+    @app.before_request
+    def handle_preflight():
+        if request.method == "OPTIONS":
+            return "", 200
     
     with app.app_context():
         from app import models
